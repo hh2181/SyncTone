@@ -1,0 +1,20 @@
+[versions]
+agp = "9.1.1"
+kotlin = "2.4.21"
+compose = "1.12.2"
+compose-material3 = "1.9.0"
+compose-icons = "1.7.3"
+android-compose-bom = "2026.09.00"
+
+[libraries]
+androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "android-compose-bom" }
+compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "compose-material3" }
+compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose" }
+compose-icons = { module = "org.jetbrains.compose.material:material-icons-extended", version.ref = "compose-icons" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

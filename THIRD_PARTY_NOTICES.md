@@ -1,0 +1,24 @@
+# Third-party notices
+
+## MiSans
+
+本项目 Windows 应用使用 MiSans 字体。字体文件版权归其权利人所有，
+适用 MiSans 字体知识产权许可协议，不受未来项目整体源码许可证的重新授权。
+
+字体元数据中的声明：
+
+Copyright (c) 2020-2025 Beijing Xiaomi Mobile Software Co.,Ltd. All Rights Reserved.
+
+字体仅在本地构建时集成到应用，源码仓库不提供字体原文件或独立字体下载。
+请从官方获取字体，并遵守相应协议：
+
+https://hyperos.mi.com/font/en
+
+## Runtime libraries
+
+本项目使用 Compose、Kotlin、AndroidX/Media3、libVLC、JNA、SQLite、OkHttp、
+NanoHTTPD 等第三方组件，各组件保留自己的版权和适用许可证。
+依赖版本见 Gradle 配置；libVLC 准备脚本保留下载包附带的许可和作者文件。
+在制作正式发布包前，需要补齐随包分发组件的许可证清单。
+
+本文件不宣称项目中的全部代码和素材均为原创，也不替代各组件的授权条款。
