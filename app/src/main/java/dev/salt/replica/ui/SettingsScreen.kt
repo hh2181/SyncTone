@@ -1,6 +1,7 @@
 package dev.salt.replica.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,11 +27,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.salt.replica.ui.theme.HyperBlue
 import dev.salt.replica.BuildConfig
+import dev.salt.replica.R
 import dev.salt.replica.ui.theme.HyperCard
 import dev.salt.replica.ui.theme.hyperClickable
 
@@ -108,12 +111,8 @@ fun SettingsScreen(
         HyperCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.padding(18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.foundation.layout.Box(
-                        Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(HyperBlue),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("S", color = androidx.compose.ui.graphics.Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    }
+                    Image(painterResource(R.drawable.app_icon), null,
+                        Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)))
                     Column(Modifier.padding(start = 12.dp)) {
                         Text("SyncTone", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                         Text("本地音乐播放器", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

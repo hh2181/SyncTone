@@ -43,6 +43,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
@@ -129,7 +130,8 @@ fun DesktopApp(store: DesktopPlayerStore, sheet: PlayerSheetState, owner: Frame,
                     Column(Modifier.width(206.dp).fillMaxHeight().background(scheme.surface)
                         .padding(horizontal = 12.dp, vertical = 24.dp)) {
                         Row(Modifier.padding(horizontal = 10.dp).height(48.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.GraphicEq, null, Modifier.size(26.dp), tint = Blue)
+                            Image(painterResource("app-icon.png"), null,
+                                Modifier.size(26.dp).clip(RoundedCornerShape(7.dp)))
                             Text("SyncTone", Modifier.padding(start = 10.dp), fontSize = 23.sp, fontWeight = FontWeight.SemiBold)
                         }
                         Spacer(Modifier.height(24.dp))

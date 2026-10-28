@@ -27,6 +27,8 @@ def main():
     foreground = Image.new('RGBA', (432, 432), (0, 0, 0, 0))
     foreground.alpha_composite(artwork.resize((288, 288), Image.Resampling.LANCZOS), (72, 72))
     save_png(foreground, resource_root / 'drawable-nodpi/ic_launcher_foreground.png')
+    save_png(artwork.resize((192, 192), Image.Resampling.LANCZOS),
+             resource_root / 'drawable-nodpi/app_icon.png')
     save_png(artwork.resize((512, 512), Image.Resampling.LANCZOS),
              ROOT / 'desktopApp/src/desktopMain/resources/app-icon.png')
     ico_path = ROOT / 'desktopApp/packaging/app-icon.ico'
