@@ -4,8 +4,8 @@
 
 | 平台 | 当前版本 | 实现 |
 | --- | --- | --- |
-| Android | 0.4.0 / versionCode 5 | Jetpack Compose、Media3 |
-| Windows x64 | 0.4.11 | Compose Multiplatform/JVM、libVLC |
+| Android | 0.5.0 / versionCode 6 | Jetpack Compose、Media3 |
+| Windows x64 | 0.5.0 | Compose Multiplatform/JVM、libVLC |
 
 Android 应用 ID 为 `app.synctone.music`。内部 Kotlin/Java namespace
 暂时保持 `dev.salt.replica`，避免改变组件引用和两端共用源码的路径。
@@ -57,4 +57,13 @@ Windows 在应用中使用 MiSans 字体。请从官方获取字体，将未经�
 首次连接受局域网路由、防火墙和网络隔离影响；当前已知的手机主动连接部分
 Windows 网络环境超时问题仍需排查。不要将单向连接成功视为全部方向已验证。
 
-本仓库目前仅提供源码，尚未发布安装包，也未选定项目整体开源许可证。
+## 下载
+
+[Release v0.5.0](https://github.com/hh2181/SyncTone/releases/tag/v0.5.0)
+提供 Android APK 和 Windows x64 便携版 ZIP，随附 SHA-256 校验文件。
+私有仓库的下载需要具有访问权限。Windows 需解压完整目录后运行 `SyncTone.exe`。
+
+两端应用图标采用 `assets/branding/app-icon.png` 中的项目图稿；使用 Pillow
+运行 `python tools/generate-app-icons.py` 可重新生成所需尺寸和格式。
+
+项目尚未选定整体开源许可证；第三方组件仍适用各自的许可证。

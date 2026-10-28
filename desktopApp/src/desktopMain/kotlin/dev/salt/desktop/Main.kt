@@ -1,6 +1,7 @@
 package dev.salt.desktop
 
 import androidx.compose.runtime.*
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
@@ -37,7 +38,7 @@ private fun launchDesktop(args: Array<String>) = application {
         scope.launch { try { store.close() } finally { exitApplication() } }
     }
     Window(onCloseRequest = ::close, state = windowState, title = "SyncTone",
-        undecorated = true) {
+        icon = painterResource("app-icon.png"), undecorated = true) {
         val chrome = remember(window) { DesktopWindowChrome(window) }
         DisposableEffect(chrome) { onDispose { chrome.close() } }
         SideEffect { window.minimumSize = Dimension(960, 640) }

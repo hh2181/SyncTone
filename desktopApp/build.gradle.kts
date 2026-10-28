@@ -97,10 +97,11 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Exe, TargetFormat.Msi)
             packageName = "SyncTone"
-            packageVersion = "0.4.11"
+            packageVersion = "0.5.0"
             modules("java.desktop", "java.logging", "java.net.http", "jdk.unsupported", "java.sql", "jdk.crypto.ec")
             appResourcesRootDir.set(layout.projectDirectory.dir("runtime"))
             windows {
+                iconFile.set(project.file("packaging/app-icon.ico"))
                 menuGroup = "SyncTone"
                 shortcut = true
                 upgradeUuid = "1b3c40a2-2ee8-4ff3-b8d1-9106ac47b925"
