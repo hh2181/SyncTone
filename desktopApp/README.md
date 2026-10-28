@@ -8,8 +8,8 @@ Windows x64 本地音乐播放器，使用 Compose Multiplatform/JVM 和 libVLC�
 .\gradlew.bat :desktopApp:createDistributable
 ```
 
-构建前准备 JDK 17 和本地 MiSans 字体；测试音频等本地资源要求见根目录
-[README](../README.md)。VLC 运行库由工具脚本按固定版本和 SHA-256 准备。
+构建前准备 JDK 17；MiSans 字体和测试音频等本地资源要求见
+[开发文档](../docs/development.md)。VLC 运行库由工具脚本按固定版本和 SHA-256 准备。
 
 便携版输出位于 `build/compose/binaries/main/app/SyncTone/`。
 运行数据保存在 EXE 旁的 `data/`，临时文件和日志位于 `portable/`。
