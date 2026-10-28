@@ -87,7 +87,7 @@ class DesktopTests {
         assertTrue(track.lyrics.lines.size > 30)
         val sung = track.lyrics.lines.first { it.start == 968L }
         assertTrue(sung.subLines.first().wordTimed)
-        assertEquals("要与Rock的你说再见了", sung.subLines[1].text)
+        assertEquals("Generated audio sample 01", sung.subLines[1].text)
     }
 
     @Test fun sidecarLyricsOverrideEmbeddedAndInvalidSidecarFallsBack() {

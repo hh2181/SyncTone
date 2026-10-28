@@ -11,15 +11,17 @@ import org.jetbrains.skia.FontVariation
 
 object MiSans {
     private val base by lazy {
-        val bytes = checkNotNull(javaClass.getResourceAsStream("/fonts/MiSansVF.ttf")).use { it.readBytes() }
-        Data.makeFromBytes(bytes).use { checkNotNull(FontMgr.default.makeFromData(it)) }
+        javaClass.getResourceAsStream("/fonts/MiSansVF.ttf")?.use { input ->
+            Data.makeFromBytes(input.readBytes()).use { FontMgr.default.makeFromData(it) }
+        }
     }
     private val families = object : LinkedHashMap<Int, FontFamily>(16, .75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, FontFamily>) = size > 24
     }
 
     @Synchronized fun family(weight: Int = 330): FontFamily = families.getOrPut(weight.coerceIn(150, 700)) {
-        val face = base.makeClone(FontVariation("wght", weight.coerceIn(150, 700).toFloat()))
+        val source = base ?: return@getOrPut FontFamily.SansSerif
+        val face = source.makeClone(FontVariation("wght", weight.coerceIn(150, 700).toFloat()))
         FontFamily(Typeface(face, "MiSansVF-$weight"))
     }
 

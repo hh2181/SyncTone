@@ -26,7 +26,7 @@ class LyricsTest {
         assertEquals(2900L, lyrics.lines.first().end)
     }
 
-    @Test fun embeddedReferenceHasTimedJapaneseAndTwoTranslationRows() {
+    @Test fun syntheticReferenceHasTimedWordsAndTwoSecondaryRows() {
         val lyrics = LyricsParser.fromMp3(File("src/main/assets/reference.mp3"), 208000)
         assertTrue(lyrics.lines.size > 30)
         assertTrue(lyrics.lines.any { it.cells.size > 10 })
@@ -37,11 +37,11 @@ class LyricsTest {
         assertEquals(2, sung.subLines.size)
         val romaji = sung.subLines[0]
         assertTrue(romaji.wordTimed)
-        assertEquals("ro", romaji.cells.first().text.trim())
-        assertEquals(1050L, romaji.cells[1].start)
-        assertEquals(4745L, romaji.cells.last().end)
+        assertEquals("syn", romaji.cells.first().text.trim())
+        assertEquals(1400L, romaji.cells[1].start)
+        assertEquals(3500L, romaji.cells.last().end)
         assertFalse(sung.subLines[1].wordTimed)
-        assertEquals("要与Rock的你说再见了", sung.subLines[1].text)
+        assertEquals("Generated audio sample 01", sung.subLines[1].text)
     }
 
     @Test fun embeddedLyricsCanBeReadFromAContentResolverStyleStream() {

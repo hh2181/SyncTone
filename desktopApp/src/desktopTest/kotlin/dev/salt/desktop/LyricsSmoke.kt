@@ -38,7 +38,7 @@ fun main(args: Array<String>): Unit = runBlocking {
             [00:01]<00:01>你<00:02>好<00:03>世<00:04>界<00:06>
             [00:01]<00:01>ni <00:02>hao <00:03>shi <00:04>jie <00:06>
             [00:01]你好世界
-            [00:08]ロックな君とはお別れだ
+            [00:08]これは表示確認用のテキストです
             [00:12]A long wrapped line with MiSans, 中文 and 日本語 that must wrap inside the lyric viewport without clipping.
             [00:18]émotion 𝄞 combining marks and supplementary characters
             [00:22]next line

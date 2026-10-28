@@ -10,7 +10,6 @@ portable/
 *.keystore
 
 # Local-only assets and machine configuration.
-/app/src/main/assets/reference.mp3
 /desktopApp/src/desktopMain/resources/fonts/*.ttf
 /desktopApp/src/desktopMain/resources/fonts/*.otf
 *.pem

@@ -38,12 +38,13 @@ Windows 原生运行库由 `desktopApp/tools/prepare-vlc.ps1` 按固定版本和
 
 ## 本地资源
 
-当前开发测试仍使用本机的 `app/src/main/assets/reference.mp3`，该音频不提交。
-Android 首次启动和部分歌词、播放、渲染测试会读取它；缺少该文件时，这些路径
-尚不能直接运行。后续上传准备需要使用可分发的测试音频替换并同步调整测试。
+`app/src/main/assets/reference.mp3` 是随源码提供的合成测试音频，包含生成的
+封面和测试字幕，不包含外部歌曲录音或歌词。生成方式和使用说明见
+[测试资源说明](app/src/main/assets/README.md)。
 
 Windows 在应用中使用 MiSans 字体。请从官方获取字体，将未经修改的
 `MiSansVF.ttf` 放入 `desktopApp/src/desktopMain/resources/fonts/` 后构建。
+未提供本地字体文件时，开发构建会使用系统 sans-serif 字体，仍可运行。
 字体文件不提交到源码仓库，也不作为独立下载附件提供。
 字体版权和使用条件见 [第三方说明](THIRD_PARTY_NOTICES.md)。
 
@@ -56,4 +57,4 @@ Windows 在应用中使用 MiSans 字体。请从官方获取字体，将未经�
 首次连接受局域网路由、防火墙和网络隔离影响；当前已知的手机主动连接部分
 Windows 网络环境超时问题仍需排查。不要将单向连接成功视为全部方向已验证。
 
-本仓库目前处于上传准备阶段，尚未发布安装包，也未选定项目整体开源许可证。
+本仓库目前仅提供源码，尚未发布安装包，也未选定项目整体开源许可证。
