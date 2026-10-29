@@ -11,6 +11,19 @@ Android 使用 Jetpack Compose 和 Media3；Windows 使用 Compose Multiplatform
 Windows 还直接编译 `app/` 内部分平台无关的歌词、统计、同步源码，并读取其中的图标资源。
 请保留整个仓库后再构建。
 
+`app/.../lyrics/online/` 是两端共用的 Kotlin/JVM 联网歌词模块，包含受限 HTTP 请求、
+歌词源适配、KRC 解码、增强 LRC 导出、匹配控制器和 Compose 搜索界面。
+平台层负责保存到 Android 私有目录或 Windows 曲库数据库，下载内容继续使用原来的歌词渲染器。
+“歌词更新”的三个分页使用共用 HorizontalPager：420 ms 的非线性平移保持新旧卡片同时参与布局。
+批量任务串行执行，启动时固定规则，按歌曲 ID 保存，支持取消请求后的暂停续传；任务不保存到磁盘。
+原文、罗马音、翻译由 `LyricContent` 标注，保存时保留内容顺序；旧曲库和旧 LRC 仍可读取。
+
+移动端同类歌曲列表共用 `ui/MusicListComponents.kt`，以统计页的封面、字体和留白为基准。
+首页、曲库、详情和队列通过 `SongRow` 提供播放与更多操作，统计页提供播放次数和累计时长；
+使用 `MusicListCard / MusicListRow / MusicListMetric / MusicListDivider` 保持容器、排版和分隔线一致。
+歌曲点选以歌曲 ID 解析 Media3 的实际队列位置，避免直接把曲库、筛选结果或推荐列表的索引用于播放器。
+播放服务可以比界面存活更久，重新连接时须主动读取实际队列及当前播放状态，不能只等待新的播放事件。
+
 ## 构建
 
 需要 JDK 17；Android 构建还需要 Android SDK 37，minSdk 26 / targetSdk 36。

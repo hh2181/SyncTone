@@ -16,6 +16,7 @@ kotlin {
             kotlin.include("dev/salt/desktop/**", "dev/salt/replica/lyrics/Lyrics.kt",
                 "dev/salt/replica/lyrics/LyricAnimation.kt", "dev/salt/replica/lyrics/StaggerMotion.kt",
                 "dev/salt/replica/lyrics/LongNoteEnvelope.kt",
+                "dev/salt/replica/lyrics/online/**",
                 "dev/salt/replica/ui/PlayerSheetState.kt",
                 "dev/salt/replica/statistics/PlaybackStatistics.kt",
                 "dev/salt/replica/statistics/HistorySync.kt",
@@ -41,7 +42,8 @@ kotlin {
         }
         val desktopTest by getting {
             kotlin.srcDir("../app/src/test/java")
-            kotlin.include("dev/salt/desktop/**", "dev/salt/replica/sync/SyncLogicTest.kt")
+            kotlin.include("dev/salt/desktop/**", "dev/salt/replica/sync/SyncLogicTest.kt",
+                "dev/salt/replica/lyrics/online/**")
             dependencies { implementation(kotlin("test-junit")) }
         }
     }
@@ -97,7 +99,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Exe, TargetFormat.Msi)
             packageName = "SyncTone"
-            packageVersion = "0.5.0"
+            packageVersion = "0.7.2"
             modules("java.desktop", "java.logging", "java.net.http", "jdk.unsupported", "java.sql", "jdk.crypto.ec")
             appResourcesRootDir.set(layout.projectDirectory.dir("runtime"))
             windows {
@@ -201,6 +203,26 @@ tasks.register<JavaExec>("lyricsSmoke") {
     classpath = compilation.output.allOutputs + tests.output.allOutputs + tests.runtimeDependencyFiles!!
     mainClass.set("dev.salt.desktop.LyricsSmokeKt")
     args(layout.buildDirectory.dir("reports/lyrics-smoke").get().asFile.absolutePath)
+    dependsOn("desktopTestClasses")
+}
+
+tasks.register<JavaExec>("onlineLyricsSmoke") {
+    group = "verification"
+    description = "Explicit opt-in network check; does not persist fetched lyrics or audio."
+    val main = kotlin.targets.getByName("desktop").compilations.getByName("main")
+    val tests = kotlin.targets.getByName("desktop").compilations.getByName("test")
+    classpath = main.output.allOutputs + tests.output.allOutputs + tests.runtimeDependencyFiles!!
+    mainClass.set("dev.salt.desktop.OnlineLyricsSmokeKt")
+    dependsOn("desktopTestClasses")
+}
+
+tasks.register<JavaExec>("onlineLyricsVisualSmoke") {
+    group = "verification"
+    val main = kotlin.targets.getByName("desktop").compilations.getByName("main")
+    val tests = kotlin.targets.getByName("desktop").compilations.getByName("test")
+    classpath = main.output.allOutputs + tests.output.allOutputs + tests.runtimeDependencyFiles!!
+    mainClass.set("dev.salt.desktop.OnlineLyricsVisualSmokeKt")
+    args(layout.buildDirectory.dir("reports/online-lyrics-visual").get().asFile.absolutePath)
     dependsOn("desktopTestClasses")
 }
 

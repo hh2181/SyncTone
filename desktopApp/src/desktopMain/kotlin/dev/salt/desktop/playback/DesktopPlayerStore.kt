@@ -6,6 +6,7 @@ import dev.salt.desktop.storage.DesktopSession
 import dev.salt.desktop.storage.DesktopSessionRepository
 import dev.salt.desktop.storage.PlayMode
 import dev.salt.replica.lyrics.LyricsParser
+import dev.salt.replica.lyrics.online.*
 import dev.salt.desktop.lyrics.DesktopLyricsSettings
 import dev.salt.desktop.statistics.DesktopStatistics
 import dev.salt.desktop.sync.DesktopSyncRepository
@@ -250,7 +251,7 @@ class DesktopPlayerStore(
         require(Files.size(path) <= 4 * 1024 * 1024) { "歌词文件过大。" }
         val track = state.value.track ?: return@command
         val lyrics = withContext(Dispatchers.IO) {
-            LyricsParser.parse(LyricsParser.decode(Files.readAllBytes(path)), state.value.durationMs, "LRC")
+            OnlineLyricsCodec.fromLrc(LyricsParser.decode(Files.readAllBytes(path)), track.durationMs)
         }
         require(lyrics.lines.isNotEmpty()) { "没有找到有效的歌词时间戳。" }
         library.persistLyrics(track.id, lyrics)
@@ -266,6 +267,12 @@ class DesktopPlayerStore(
         mutableState.update { it.copy(lyricsOffsetMs = offset) }
     }
     fun restoreLyrics() { state.value.currentId?.let(library::restoreLyrics) }
+    val onlineLyricsPreferenceFile get() = repository.directory.resolve("online-lyrics.preference").toFile()
+    suspend fun hasLyrics(song: LyricSong): Boolean = library.hasLyrics(song.id)
+    suspend fun saveOnlineLyrics(song: LyricSong, download: LyricDownload, onlyMissing: Boolean) {
+        library.persistOnlineLyrics(song.id, download.lyrics, onlyMissing)
+        mutableState.update { if (it.currentId == song.id) it.copy(lyricsOffsetMs = 0) else it }
+    }
     fun dismissError() { mutableState.update { it.copy(error = null) } }
     private fun report(message: String) { mutableState.update { it.copy(error = message) } }
 

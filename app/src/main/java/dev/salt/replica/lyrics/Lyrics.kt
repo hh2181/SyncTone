@@ -4,13 +4,14 @@ import java.io.File
 import java.io.InputStream
 
 data class LyricCell(val start: Long, val end: Long, val text: String)
-data class LyricSubLine(val cells: List<LyricCell>) {
+enum class LyricContent(val label: String) { Original("原文"), Romanization("罗马音"), Translation("翻译") }
+data class LyricSubLine(val cells: List<LyricCell>, val kind: LyricContent = LyricContent.Translation) {
     val text: String = cells.joinToString("") { it.text }
     val wordTimed: Boolean = cells.count { it.text.isNotBlank() && it.end > it.start } > 1 &&
         cells.zipWithNext().all { (a, b) -> a.start <= b.start }
 }
 data class LyricLine(val start: Long, val end: Long, val cells: List<LyricCell>,
-                     val subLines: List<LyricSubLine> = emptyList()) {
+                     val subLines: List<LyricSubLine> = emptyList(), val kind: LyricContent = LyricContent.Original) {
     val text: String = cells.joinToString("") { it.text }
     val translation: String = subLines.joinToString("\n") { it.text }
 }

@@ -71,6 +71,7 @@ import androidx.core.view.WindowCompat
 import dev.salt.replica.QaRequest
 import dev.salt.replica.R
 import dev.salt.replica.lyrics.LyricsView
+import dev.salt.replica.lyrics.online.*
 import dev.salt.replica.playback.PlayerStore
 import dev.salt.replica.playback.Playlist
 import dev.salt.replica.playback.Track
@@ -105,6 +106,18 @@ fun PlayerApp(store: PlayerStore, settings: ReplicaSettings, qa: QaRequest? = nu
     var playlistDialog by remember { mutableStateOf<PlaylistDialogState?>(null) }
     var timerMinutes by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
+    val onlineLyrics = remember(store, scope) {
+        OnlineLyricsController(scope, java.io.File(context.filesDir, "online-lyrics.preference"), store::saveOnlineLyrics,
+            hasLyrics = store::hasLyrics)
+    }
+    val onlineState by onlineLyrics.state.collectAsState()
+    val lyricSong = store.track?.let { LyricSong(it.id, it.title, it.artist, it.duration) }
+    LaunchedEffect(store.tracks) {
+        onlineLyrics.updateLibrary(store.tracks.map { LyricSong(it.id, it.title, it.artist, it.duration) }, store.track?.id)
+    }
+    LaunchedEffect(lyricSong, store.track?.lyrics, onlineState.settings) {
+        onlineLyrics.autoMatchFor(lyricSong, store.track?.lyrics?.lines?.isNotEmpty() != false)
+    }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val lifecycleState by lifecycle.currentStateFlow.collectAsStateWithLifecycle()
     val view = LocalView.current
@@ -238,10 +251,11 @@ fun PlayerApp(store: PlayerStore, settings: ReplicaSettings, qa: QaRequest? = nu
             Box(
                 Modifier
                     .fillMaxSize()
-                    .pointerInput(swipeEnabled) {
+                    .pointerInput(swipeEnabled, section) {
                         if (!swipeEnabled) return@pointerInput
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
+                            if (section == "歌词更新" && down.position.x > 24.dp.toPx()) return@awaitEachGesture
                             val tracker = VelocityTracker()
                             tracker.addPosition(down.uptimeMillis, down.position)
                             var dx = 0f
@@ -298,7 +312,7 @@ fun PlayerApp(store: PlayerStore, settings: ReplicaSettings, qa: QaRequest? = nu
                     "统计" -> StatisticsScreen(store, { drawer.open() }, surfaceVisible, { statisticsDetailActive = it }, dashboardModifier)
                     "连接" -> SyncScreen(store, { drawer.open() }, dashboardModifier)
                     "扫描音乐" -> MusicScanScreen({ drawer.open() }, dashboardModifier)
-                    "歌词更新" -> PlaceholderScreen(current, { drawer.open() }, dashboardModifier)
+                    "歌词更新" -> LyricsUpdateScreen(onlineLyrics, dashboardModifier, { drawer.open() })
                     else -> HomeScreen(
                         store, darkTheme, { drawer.open() }, { picker.launch(arrayOf("audio/*")) },
                         { sheet.to(true) }, { track -> store.playTrack(track.id) },
@@ -440,15 +454,24 @@ fun PlayerApp(store: PlayerStore, settings: ReplicaSettings, qa: QaRequest? = nu
                 when (panel) {
                     "queue" -> {
                         PanelTitle("播放队列") { picker.launch(arrayOf("audio/*")) }
-                        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp).padding(bottom = 30.dp)) {
-                            itemsIndexed(store.tracks) { i, track ->
-                                ListItem(headlineContent = { Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                    supportingContent = { Text(track.artist) }, leadingContent = { Artwork(track.artwork, Modifier.size(44.dp).clip(RoundedCornerShape(5.dp))) },
-                                    modifier = Modifier.clickable { store.select(i); panel = null })
+                        MusicListCard(Modifier.padding(horizontal = 16.dp).padding(bottom = 30.dp)) {
+                        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp), contentPadding = PaddingValues(vertical = 6.dp)) {
+                            itemsIndexed(store.activeQueue, key = { _, track -> track.id }) { i, track ->
+                                SongRow(track, i + 1, store.track?.id == track.id, { store.select(i); panel = null }, null)
+                                if (i < store.activeQueue.lastIndex) MusicListDivider()
                             }
                         }
+                        }
                     }
-                    "lyrics" -> SettingsPanel(settings, onImport = { lyricPicker.launch(arrayOf("*/*")); panel = null })
+                    "lyrics" -> SettingsPanel(settings,
+                        onImport = { lyricPicker.launch(arrayOf("*/*")); panel = null },
+                        onOnline = { panel = null; section = "歌词更新"; sheet.to(false) },
+                        onRestore = { scope.launch {
+                            try { store.restoreLyrics() }
+                            catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                            catch (_: Exception) { android.widget.Toast.makeText(context, "恢复失败，请检查音乐文件是否可读", android.widget.Toast.LENGTH_SHORT).show() }
+                        } },
+                        hasTrack = store.track != null)
                     "timer" -> {
                         PanelTitle("睡眠定时")
                         listOf(0, 15, 30, 45, 60, 90).forEach { minutes ->
@@ -840,9 +863,15 @@ private fun PanelTitle(title: String, add: (() -> Unit)? = null) {
 }
 
 @Composable
-private fun SettingsPanel(settings: ReplicaSettings, onImport: () -> Unit) {
+private fun SettingsPanel(settings: ReplicaSettings, onImport: () -> Unit, onOnline: () -> Unit,
+                          onRestore: () -> Unit, hasTrack: Boolean) {
     PanelTitle("歌词设置")
     Column(Modifier.fillMaxWidth().heightIn(max = 600.dp).verticalScroll(rememberScrollState()).padding(bottom = 30.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            dev.salt.buttons.SyncToneButton(onOnline, Modifier.weight(1f), enabled = hasTrack) { Text("联网下载歌词") }
+            TextButton(onImport, enabled = hasTrack) { Text("打开 LRC") }
+        }
+        TextButton(onRestore, enabled = hasTrack, modifier = Modifier.padding(horizontal = 16.dp)) { Text("恢复原歌词") }
         SettingsSlider("字号", settings.fontSize, 16f..40f, 23, { "${it.roundToInt()} sp" }) {
             settings.fontSize = it; settings.save()
         }
@@ -872,7 +901,6 @@ private fun SettingsPanel(settings: ReplicaSettings, onImport: () -> Unit) {
         Text("流光形态  ${settings.mesh + 1}", Modifier.padding(24.dp, 12.dp))
         Slider(settings.mesh.toFloat(), { settings.mesh = it.roundToInt() }, valueRange = 0f..4f, steps = 3,
             onValueChangeFinished = settings::save, modifier = Modifier.padding(horizontal = 24.dp))
-        TextButton(onImport, Modifier.padding(horizontal = 12.dp)) { Text("打开 LRC 歌词") }
     }
 }
 

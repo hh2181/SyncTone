@@ -260,7 +260,7 @@ private fun StatisticsOverview(
             Spacer(Modifier.height(12.dp))
         }
         item("rank-header") {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).background(MaterialTheme.colorScheme.surface).padding(horizontal = 15.dp)) {
+            Column(Modifier.fillMaxWidth().clip(musicListCorners(first = true, last = false)).background(MaterialTheme.colorScheme.surface).padding(horizontal = 15.dp)) {
                 Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("歌曲播放排行", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     TextButton({ expanded = !expanded; if (!expanded) query = "" }, enabled = !loading, contentPadding = PaddingValues(start = 8.dp)) {
@@ -279,7 +279,7 @@ private fun StatisticsOverview(
             StatSongRow(row, snapshot.songs.indexOfFirst { it.track.id == row.track.id } + 1, art[row.track.id], showTime = false)
             if (index != shown.lastIndex) StatDivider()
         }
-        item("rank-bottom") { Spacer(Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)).background(MaterialTheme.colorScheme.surface)) }
+        item("rank-bottom") { Spacer(Modifier.fillMaxWidth().height(12.dp).clip(musicListCorners(first = false, last = true)).background(MaterialTheme.colorScheme.surface)) }
     }
 }
 
@@ -409,28 +409,15 @@ private fun StatisticsChart(windows: List<StatWindow>, values: List<Double>, col
 
 @Composable
 private fun StatSongRow(song: SongStatistic, index: Int, bitmap: Bitmap?, showTime: Boolean) {
-    Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 14.dp, vertical = 11.dp).heightIn(min = 44.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(index.toString(), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(if (index > 99) 26.dp else 17.dp))
-        Artwork(bitmap, Modifier.size(39.dp).clip(RoundedCornerShape(9.dp)))
-        Column(Modifier.weight(1f)) {
-            Text(song.track.title, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(song.track.artist, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp))
-        }
-        Column(horizontalAlignment = Alignment.End) {
-            Text("${countText(song.plays)} 次", fontSize = 13.sp)
-            if (showTime) Text(timeText(song.listenedMs), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 3.dp))
-        }
+    MusicListRow(song.track.title, song.track.artist, index, artwork = { Artwork(bitmap, it) }) {
+        MusicListMetric("${countText(song.plays)} 次", if (showTime) timeText(song.listenedMs) else null)
     }
 }
 
 @Composable
-private fun StatDivider() { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.background(MaterialTheme.colorScheme.surface).padding(start = 43.dp, end = 14.dp)) }
+private fun StatDivider() { MusicListDivider() }
 
-private fun statisticsRankShape(first: Boolean, last: Boolean) = RoundedCornerShape(
-    topStart = if (first) 24.dp else 0.dp, topEnd = if (first) 24.dp else 0.dp,
-    bottomStart = if (last) 24.dp else 0.dp, bottomEnd = if (last) 24.dp else 0.dp
-)
+private fun statisticsRankShape(first: Boolean, last: Boolean) = musicListCorners(first, last)
 
 @Composable
 private fun StatEmpty(label: String = "暂无播放记录", modifier: Modifier = Modifier) {

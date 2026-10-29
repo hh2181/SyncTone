@@ -2,6 +2,7 @@ package dev.salt.desktop.library
 
 import dev.salt.desktop.storage.DesktopLibraryRepository
 import dev.salt.replica.lyrics.Lyrics
+import dev.salt.replica.lyrics.online.LyricsAlreadyPresentException
 import dev.salt.replica.sync.fileDigest
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -244,6 +245,28 @@ class DesktopLibrary {
     fun cancelScan() { scanCancelled.set(true) }
     fun dismissError() { mutable.update { it.copy(error = null) } }
     fun persistLyrics(id: String, lyrics: Lyrics) = command { db -> db.setLyrics(id, lyrics); refresh(db) }
+    suspend fun hasLyrics(id: String): Boolean = withContext(Dispatchers.IO) {
+        operations.withLock {
+            val db = requireNotNull(repository) { "曲库尚未就绪" }
+            check(!closed && db.containsTrack(id)) { "歌曲已从曲库移除" }
+            db.lyrics(id).lines.isNotEmpty()
+        }
+    }
+    suspend fun persistOnlineLyrics(id: String, lyrics: Lyrics, onlyMissing: Boolean) = withContext(Dispatchers.IO) {
+        operations.withLock {
+            check(!closed && state.value.ready) { "曲库尚未就绪" }
+            check(state.value.directory.isNotBlank()) { "曲库当前无法持久保存" }
+            val db = requireNotNull(repository)
+            check(db.containsTrack(id)) { "歌曲已从曲库移除" }
+            if (onlyMissing && db.lyrics(id).lines.isNotEmpty()) throw LyricsAlreadyPresentException()
+            db.setLyrics(id, lyrics)
+            db.setProperty("lyric_offset:$id", "0")
+            // Avoid reloading every metadata row once per song in a large batch.
+            mutable.update { state -> state.copy(tracks = state.tracks.map { track ->
+                if (track.id == id) track.copy(lyricsLoader = { db.lyrics(id) }) else track
+            }) }
+        }
+    }
     fun restoreLyrics(id: String) = command { db -> db.restoreLyrics(id); refresh(db) }
     suspend fun lyricsOffset(id: String): Long = withContext(Dispatchers.IO) {
         repository?.property("lyric_offset:$id")?.toLongOrNull()?.coerceIn(-10_000L, 10_000L) ?: 0

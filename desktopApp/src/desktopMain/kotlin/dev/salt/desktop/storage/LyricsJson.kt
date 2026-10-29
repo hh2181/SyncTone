@@ -7,8 +7,10 @@ internal fun encodeLyrics(lyrics: Lyrics): String = buildJsonObject {
     put("source", lyrics.source)
     put("lines", JsonArray(lyrics.lines.map { line -> buildJsonObject {
         put("start", line.start); put("end", line.end)
+        put("kind", line.kind.name)
         put("cells", encodeCells(line.cells))
         put("secondary", JsonArray(line.subLines.map { encodeCells(it.cells) }))
+        put("secondaryKinds", JsonArray(line.subLines.map { JsonPrimitive(it.kind.name) }))
     } }))
 }.toString()
 
@@ -24,6 +26,9 @@ internal fun decodeLyrics(text: String): Lyrics {
     } }
     return Lyrics(json.getValue("lines").jsonArray.map { item -> item.jsonObject.let {
         LyricLine(it.getValue("start").jsonPrimitive.long, it.getValue("end").jsonPrimitive.long,
-            cells(it.getValue("cells")), it.getValue("secondary").jsonArray.map { sub -> LyricSubLine(cells(sub)) })
+            cells(it.getValue("cells")), it.getValue("secondary").jsonArray.mapIndexed { index, sub ->
+                LyricSubLine(cells(sub), runCatching { LyricContent.valueOf(it["secondaryKinds"]!!.jsonArray[index].jsonPrimitive.content) }
+                    .getOrDefault(LyricContent.Translation))
+            }, runCatching { LyricContent.valueOf(it["kind"]!!.jsonPrimitive.content) }.getOrDefault(LyricContent.Original))
     } }, json.getValue("source").jsonPrimitive.content)
 }

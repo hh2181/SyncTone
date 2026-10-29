@@ -17,6 +17,11 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import dev.salt.replica.lyrics.Lyrics
 import dev.salt.replica.lyrics.LyricsParser
+import dev.salt.replica.lyrics.online.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import dev.salt.replica.statistics.StatTrack
 import dev.salt.replica.statistics.StatisticsRepository
 import kotlinx.coroutines.Dispatchers
@@ -40,6 +45,7 @@ data class Track(
 
 @Stable
 class PlayerStore(private val context: Context) {
+    private val lyricWrites = Mutex()
     private val prefs = context.getSharedPreferences("player", Context.MODE_PRIVATE)
     var tracks by mutableStateOf<List<Track>>(emptyList()); private set
     var index by mutableIntStateOf(0); private set
@@ -74,11 +80,7 @@ class PlayerStore(private val context: Context) {
                 controller = future.get().apply {
                     addListener(object : Player.Listener {
                         override fun onEvents(player: Player, events: Player.Events) {
-                            playing = player.isPlaying
-                            index = player.currentMediaItemIndex.coerceAtLeast(0)
-                            shuffle = player.shuffleModeEnabled
-                            repeat = player.repeatMode
-                            synchronize()
+                            updatePlaybackState(player)
                         }
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
                             playing = isPlaying
@@ -88,6 +90,8 @@ class PlayerStore(private val context: Context) {
                 }
                 ready = true
                 populate()
+                // A retained session need not emit a new event when we connect.
+                controller?.let(::updatePlaybackState)
             }.onFailure { error = it.localizedMessage }
         }, ContextCompat.getMainExecutor(context))
     }
@@ -135,17 +139,53 @@ class PlayerStore(private val context: Context) {
         }
     }
 
-    suspend fun importLyrics(uri: Uri) = withContext(Dispatchers.IO) {
-        val current = track ?: return@withContext
-        val text = context.contentResolver.openInputStream(uri)?.use { LyricsParser.decode(it.readBytes()) } ?: return@withContext
-        val lyrics = LyricsParser.parse(text, current.duration, "LRC")
-        if (lyrics.lines.isNotEmpty()) {
-            lyricFile(current.id).apply { parentFile?.mkdirs(); writeText(text) }
-            withContext(Dispatchers.Main) { tracks = tracks.map { if (it.id == current.id) it.copy(lyrics = lyrics) else it } }
+    suspend fun importLyrics(uri: Uri) {
+        val current = track ?: return
+        withContext(Dispatchers.IO) {
+            val text = context.contentResolver.openInputStream(uri)?.use { LyricsParser.decode(it.readBytes()) } ?: return@withContext
+            val lyrics = OnlineLyricsCodec.fromLrc(text, current.duration)
+            if (lyrics.lines.isNotEmpty()) persistLyrics(current.id, lyrics, text, false)
         }
     }
 
-    private fun readTrack(uri: Uri, id: String): Track {
+    suspend fun saveOnlineLyrics(song: LyricSong, download: LyricDownload, onlyMissing: Boolean) =
+        persistLyrics(song.id, download.lyrics, OnlineLyricsCodec.toLrc(download.lyrics), onlyMissing)
+
+    suspend fun hasLyrics(song: LyricSong): Boolean = withContext(Dispatchers.Main) {
+        (tracks.firstOrNull { it.id == song.id } ?: error("歌曲已从曲库移除")).lyrics.lines.isNotEmpty()
+    }
+
+    private suspend fun persistLyrics(id: String, lyrics: Lyrics, text: String, onlyMissing: Boolean) = lyricWrites.withLock {
+        withContext(Dispatchers.Main) {
+            val target = tracks.firstOrNull { it.id == id } ?: error("歌曲已从曲库移除")
+            if (onlyMissing && target.lyrics.lines.isNotEmpty()) throw LyricsAlreadyPresentException()
+        }
+        withContext(Dispatchers.IO) {
+            val destination = lyricFile(id)
+            destination.parentFile?.mkdirs()
+            val temporary = File.createTempFile("lyrics-", ".tmp", destination.parentFile)
+            try {
+                temporary.writeText(text)
+                Files.move(temporary.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            } finally { temporary.delete() }
+        }
+        withContext(Dispatchers.Main) { tracks = tracks.map { if (it.id == id) it.copy(lyrics = lyrics) else it } }
+    }
+
+    suspend fun restoreLyrics() {
+        val current = track ?: return
+        lyricWrites.withLock {
+            val original = withContext(Dispatchers.IO) {
+                val embedded = readTrack(current.uri, current.id, readOverride = false)
+                val file = lyricFile(current.id)
+                check(!file.exists() || file.delete()) { "无法恢复原歌词" }
+                embedded
+            }
+            withContext(Dispatchers.Main) { tracks = tracks.map { if (it.id == current.id) original else it } }
+        }
+    }
+
+    private fun readTrack(uri: Uri, id: String, readOverride: Boolean = true): Track {
         val retriever = MediaMetadataRetriever()
         try {
             if (uri.scheme == "file") retriever.setDataSource(uri.path.orEmpty())
@@ -165,7 +205,7 @@ class PlayerStore(private val context: Context) {
             val sidecar = lyricFile(id)
             val localFile = uri.takeIf { it.scheme == "file" }?.path?.let(::File)
             val lyrics = runCatching { when {
-                sidecar.exists() -> LyricsParser.parse(sidecar.readText(), duration, "LRC")
+                readOverride && sidecar.exists() -> OnlineLyricsCodec.fromLrc(sidecar.readText(), duration)
                 localFile != null -> LyricsParser.fromMp3(localFile, duration)
                 else -> context.contentResolver.openInputStream(uri)?.use { LyricsParser.fromMp3(it, duration) }
                     ?: Lyrics(emptyList(), "NONE")
@@ -177,10 +217,18 @@ class PlayerStore(private val context: Context) {
 
     private fun populate(force: Boolean = false) {
         val player = controller ?: return
-        if (tracks.isEmpty() || (!force && player.mediaItemCount != 0)) return
-        val restored = queueIds.mapNotNull { id -> tracks.firstOrNull { it.id == id } }
-        if (restored.isEmpty()) queueIds = emptyList()
+        if (tracks.isEmpty()) return
+        if (!force && player.mediaItemCount != 0) {
+            // The service can outlive this store. Its queue, rather than the refreshed
+            // library or saved queue preference, defines the controller's indices.
+            queueIds = playerQueueIds(player)
+            return
+        }
+        // Importing audio forces a library queue so pendingIndex can select the
+        // first newly added track, even when the previous queue was a playlist.
+        val restored = if (force) emptyList() else queueIds.mapNotNull { id -> tracks.firstOrNull { it.id == id } }
         val effective = restored.ifEmpty { tracks }
+        queueIds = effective.map { it.id }
         player.setMediaItems(effective.map(::mediaItem), pendingIndex.coerceIn(0, effective.lastIndex), pendingPosition)
         player.repeatMode = Player.REPEAT_MODE_ALL
         player.prepare()
@@ -189,6 +237,17 @@ class PlayerStore(private val context: Context) {
 
     private fun mediaItem(t: Track) = MediaItem.Builder().setMediaId(t.id).setUri(t.uri).setMediaMetadata(
         MediaMetadata.Builder().setTitle(t.title).setArtist(t.artist).setAlbumTitle(t.album).build()).build()
+
+    private fun playerQueueIds(player: Player): List<String> =
+        List(player.mediaItemCount) { player.getMediaItemAt(it).mediaId }
+
+    private fun updatePlaybackState(player: Player) {
+        playing = player.isPlaying
+        index = player.currentMediaItemIndex.coerceAtLeast(0)
+        shuffle = player.shuffleModeEnabled
+        repeat = player.repeatMode
+        synchronize()
+    }
 
     /** Replaces the playback queue with [list] and starts at [startIndex]. */
     fun playQueue(list: List<Track>, startIndex: Int = 0, play: Boolean = true) {
@@ -205,8 +264,10 @@ class PlayerStore(private val context: Context) {
     /** Plays [id] if it is already in the active queue, otherwise switches the queue to the library. */
     fun playTrack(id: String) {
         val player = controller ?: return
-        val position = activeQueue.indexOfFirst { it.id == id }
+        val actualQueue = playerQueueIds(player)
+        val position = actualQueue.indexOf(id)
         if (position >= 0) {
+            queueIds = actualQueue
             player.seekToDefaultPosition(position)
             player.play()
             synchronize()
@@ -267,7 +328,7 @@ class PlayerStore(private val context: Context) {
     fun toggle() { controller?.run { if (isPlaying) pause() else play() } }
     fun playWhenReady(value: Boolean) { controller?.run { if (value) play() else pause() } }
     fun seek(ms: Long) { controller?.seekTo(ms.coerceIn(0, track?.duration ?: 0)); synchronize() }
-    fun select(i: Int) { controller?.seekToDefaultPosition(i); controller?.play(); synchronize() }
+    fun select(i: Int) { activeQueue.getOrNull(i)?.let { playTrack(it.id) } }
     fun previous() { controller?.seekToPreviousMediaItem(); synchronize() }
     fun next() { controller?.seekToNextMediaItem(); synchronize() }
     fun cycleMode() {

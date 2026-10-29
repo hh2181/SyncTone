@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import dev.salt.buttons.SyncToneIconButton as IconButton
 import androidx.compose.material3.MaterialTheme
@@ -143,7 +142,7 @@ fun HomeScreen(
         }
         if (tracks.isEmpty()) {
             item {
-                HyperCard(Modifier.fillMaxWidth()) {
+                MusicListCard {
                     Column(Modifier.padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("还没有找到音乐", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
                         Text("点击右上角 + 添加本地文件，文件不会被复制", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
@@ -152,11 +151,11 @@ fun HomeScreen(
             }
         } else {
             item {
-                HyperCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+                MusicListCard(Modifier.padding(vertical = 6.dp)) {
                     tracks.take(5).forEachIndexed { index, track ->
-                        SongRow(store, track, index + 1, store.track?.id == track.id, { onPlayTrack(track) }, { onMoreTrack(track) }, compact = true)
+                        SongRow(track, index + 1, store.track?.id == track.id, { onPlayTrack(track) }, { onMoreTrack(track) })
                         if (index < minOf(4, tracks.lastIndex)) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 62.dp))
+                            MusicListDivider()
                         }
                     }
                 }
@@ -218,7 +217,7 @@ fun SongsScreen(
         Spacer(Modifier.height(10.dp))
         HyperSearchField(query, { query = it }, "搜索歌曲、艺人或专辑", Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))
-        HyperCard(Modifier.fillMaxWidth().weight(1f), shape = RoundedCornerShape(20.dp)) {
+        MusicListCard(Modifier.weight(1f)) {
             if (visible.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("没有匹配的歌曲", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
@@ -226,9 +225,9 @@ fun SongsScreen(
             } else {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 6.dp)) {
                     itemsIndexed(visible, key = { _, t -> t.id }) { index, track ->
-                        SongRow(store, track, index + 1, store.track?.id == track.id, { onPlayTrack(track) }, { onMoreTrack(track) })
+                        SongRow(track, index + 1, store.track?.id == track.id, { onPlayTrack(track) }, { onMoreTrack(track) })
                         if (index < visible.lastIndex) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(start = 70.dp))
+                            MusicListDivider()
                         }
                     }
                 }
@@ -345,58 +344,17 @@ private fun LibraryTile(
 
 @Composable
 fun SongRow(
-    store: PlayerStore,
     track: Track,
     index: Int,
     current: Boolean,
     onClick: () -> Unit,
-    onMore: (() -> Unit)?,
-    compact: Boolean = false
+    onMore: (() -> Unit)?
 ) {
-    val height = if (compact) 50.dp else 68.dp
-    val cover = if (compact) 36.dp else 46.dp
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(height)
-            .hyperClickable(onClick = onClick)
-            .padding(horizontal = if (compact) 10.dp else 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (current) {
-            Icon(
-                Icons.Default.PlayArrow, "正在播放",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(if (compact) 14.dp else 16.dp)
-            )
-            Spacer(Modifier.width(if (compact) 3.dp else 4.dp))
-        } else {
-            Text(
-                "%02d".format(index),
-                fontSize = if (compact) 10.sp else 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.width(if (compact) 17.dp else 20.dp)
-            )
-            Spacer(Modifier.width(2.dp))
-        }
-        Artwork(track.artwork, Modifier.size(cover).clip(RoundedCornerShape(if (compact) 9.dp else 10.dp)))
-        Column(Modifier.weight(1f).padding(start = if (compact) 10.dp else 12.dp, end = 6.dp)) {
-            Text(
-                track.title, fontSize = if (compact) 13.sp else 15.sp, fontWeight = FontWeight.Medium,
-                color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                maxLines = 1, overflow = TextOverflow.Ellipsis
-            )
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = if (compact) 1.dp else 3.dp)) {
-                Text(
-                    track.artist.ifBlank { "未知艺人" }, fontSize = if (compact) 10.sp else 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-        Text(durationText(track.duration), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    MusicListRow(track.title, track.artist, index, secondaryMetadata = durationText(track.duration), modifier = Modifier.hyperClickable(onClick = onClick),
+        current = current, artwork = { Artwork(track.artwork, it) }) {
         if (onMore != null) {
-            IconButton(onMore, Modifier.size(if (compact) 30.dp else 34.dp)) {
-                Icon(Icons.Default.MoreVert, "更多", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(if (compact) 16.dp else 18.dp))
+            IconButton(onMore) {
+                Icon(Icons.Default.MoreVert, "更多操作：${track.title}", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
             }
         }
     }

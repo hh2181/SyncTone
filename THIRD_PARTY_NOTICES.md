@@ -14,6 +14,12 @@ Copyright (c) 2020-2025 Beijing Xiaomi Mobile Software Co.,Ltd. All Rights Reser
 
 https://hyperos.mi.com/font/en
 
+## LDDC 与歌词来源参考
+
+联网歌词功能的设计与协议研究参考 LDDC（沉默の金，GPL-3.0-only）：
+https://github.com/chenmozhijin/LDDC 。应用未打包 LDDC 的 Python 源码或运行时。
+歌词由酷狗、LRCLIB 提供，版权归相应权利人；接口及存储说明见 `docs/online-lyrics.md`。
+
 ## Runtime libraries
 
 本项目使用 Compose、Kotlin、AndroidX/Media3、libVLC、JNA、SQLite、OkHttp、

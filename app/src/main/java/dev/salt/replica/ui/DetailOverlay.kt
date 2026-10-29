@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import dev.salt.buttons.SyncToneIconButton as IconButton
 import androidx.compose.material3.MaterialTheme
@@ -64,7 +63,6 @@ import dev.salt.replica.R
 import dev.salt.replica.playback.PlayerStore
 import dev.salt.replica.playback.Playlist
 import dev.salt.replica.playback.Track
-import dev.salt.replica.ui.theme.HyperCard
 import dev.salt.replica.ui.theme.HyperPillButton
 import dev.salt.replica.ui.theme.HyperRed
 import dev.salt.replica.ui.theme.hyperClickable
@@ -325,10 +323,7 @@ fun DetailOverlay(
                 }
             }
             Spacer(Modifier.height(12.dp))
-            HyperCard(
-                Modifier.fillMaxWidth().weight(1f).padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(20.dp)
-            ) {
+            MusicListCard(Modifier.weight(1f).padding(horizontal = 16.dp)) {
                 if (tracks.isEmpty()) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("这里还没有歌曲", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -337,15 +332,12 @@ fun DetailOverlay(
                     LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 6.dp)) {
                         itemsIndexed(tracks, key = { _, t -> t.id }) { index, track ->
                             SongRow(
-                                store, track, index + 1, store.track?.id == track.id,
+                                track, index + 1, store.track?.id == track.id,
                                 { onPlay(tracks, index) },
                                 { onMore(track, playlist?.id) }
                             )
                             if (index < tracks.lastIndex) {
-                                HorizontalDivider(
-                                    color = MaterialTheme.colorScheme.outlineVariant,
-                                    modifier = Modifier.padding(start = 70.dp)
-                                )
+                                MusicListDivider()
                             }
                         }
                     }

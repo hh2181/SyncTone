@@ -176,7 +176,11 @@ class DesktopLibraryRepository(directory: Path?) : AutoCloseable {
         return bytes
     }
 
-    @Synchronized private fun lyrics(id: String): Lyrics {
+    @Synchronized fun containsTrack(id: String): Boolean = database.prepareStatement("SELECT 1 FROM tracks WHERE id=?").use {
+        it.setString(1, id); it.executeQuery().use { row -> row.next() }
+    }
+
+    @Synchronized fun lyrics(id: String): Lyrics {
         if (database.isClosed) return Lyrics.Empty
         lyricsCache[id]?.let { return it }
         val lyrics = database.prepareStatement("SELECT COALESCE(lyric_override,lyrics) FROM tracks WHERE id=?").use {

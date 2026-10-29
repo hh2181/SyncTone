@@ -4,6 +4,7 @@ package dev.salt.desktop.ui
 
 import dev.salt.buttons.SyncToneIconButton
 import dev.salt.buttons.SyncToneButtonDensity
+import dev.salt.replica.lyrics.online.*
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -86,6 +87,17 @@ fun DesktopApp(store: DesktopPlayerStore, sheet: PlayerSheetState, owner: Frame,
     var page by remember { mutableStateOf("首页") }
     var search by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    val onlineLyrics = remember(store, scope) {
+        OnlineLyricsController(scope, store.onlineLyricsPreferenceFile, store::saveOnlineLyrics, hasLyrics = store::hasLyrics)
+    }
+    val onlineState by onlineLyrics.state.collectAsState()
+    val lyricSong = state.track?.let { LyricSong(it.id, it.title, it.artist, it.durationMs) }
+    LaunchedEffect(library.tracks) {
+        onlineLyrics.updateLibrary(library.tracks.map { LyricSong(it.id, it.title, it.artist, it.durationMs) }, state.currentId)
+    }
+    LaunchedEffect(lyricSong, lyrics, onlineState.settings) {
+        onlineLyrics.autoMatchFor(lyricSong, lyrics.lines.isNotEmpty())
+    }
     val detail = remember { LibraryDetailState(scope) }
     var paneCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     LaunchedEffect(page) { detail.clear() }
@@ -138,7 +150,8 @@ fun DesktopApp(store: DesktopPlayerStore, sheet: PlayerSheetState, owner: Frame,
                         listOf("首页" to Icons.Default.Home, "全部歌曲" to Icons.Default.MusicNote,
                             "扫描音乐" to Icons.Default.FolderOpen,
                             "专辑" to Icons.Default.Album, "艺人" to Icons.Default.Person,
-                            "统计" to appIcon("ic_nav_stats"), "连接" to appIcon("ic_nav_cast")).forEach { (label, icon) ->
+                            "统计" to appIcon("ic_nav_stats"), "连接" to appIcon("ic_nav_cast"),
+                            "歌词更新" to Icons.Default.Subtitles).forEach { (label, icon) ->
                             val interaction = remember(label) { MutableInteractionSource() }
                             val hovered by interaction.collectIsHoveredAsState()
                             Row(Modifier.fillMaxWidth().height(46.dp).clip(DesktopCardShape)
@@ -179,12 +192,14 @@ fun DesktopApp(store: DesktopPlayerStore, sheet: PlayerSheetState, owner: Frame,
                             desktopPageTransition(DesktopPageOrder.indexOf(targetState) > DesktopPageOrder.indexOf(initialState))
                         }, modifier = Modifier.weight(1f)) { target ->
                             Column(Modifier.fillMaxSize()) {
-                                Row(Modifier.fillMaxWidth().height(66.dp), verticalAlignment = Alignment.CenterVertically) {
+                                if (target != "歌词更新") Row(Modifier.fillMaxWidth().height(66.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Text(target, Modifier.weight(1f), fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
                                     if (target !in listOf("设置", "扫描音乐", "统计", "连接")) Tool("导入音乐", Icons.Default.Add, ::importAudio,
                                         state.ready && !library.importing && library.scan.phase != ScanPhase.Scanning)
                                 }
-                                if (target == "扫描音乐") {
+                                if (target == "歌词更新") {
+                                    LyricsUpdateScreen(onlineLyrics, Modifier.fillMaxSize())
+                                } else if (target == "扫描音乐") {
                                     MusicScanScreen(library, store.library) { chooseMusicFolder(owner) { store.library.addFolder(it) } }
                                 } else if (target == "统计") {
                                     StatisticsScreen(store, search, paneCoordinates, detail.request?.anchor) { title, artist, anchor -> detail.open(title, artist, anchor) }
@@ -368,7 +383,8 @@ fun DesktopApp(store: DesktopPlayerStore, sheet: PlayerSheetState, owner: Frame,
                 LyricsSettingsDialog(lyricsSettings, lyricSettings, state.lyricsOffsetMs, state.track != null,
                     store::updateLyricsSettings, store::offsetLyrics,
                     onImport = { chooseFiles(owner, true) { it.firstOrNull()?.let(store::importLyrics) } },
-                    onRestore = store::restoreLyrics, onDismiss = { lyricsSettings = false })
+                    onRestore = store::restoreLyrics, onDismiss = { lyricsSettings = false },
+                    onOnline = { lyricsSettings = false; page = "歌词更新"; sheet.to(false) })
             }
         }
         if (queue) DesktopAlertDialog(onDismissRequest = { queue = false }, title = { Text("播放队列 · ${state.queue.size}") },

@@ -31,7 +31,8 @@ import kotlin.math.roundToInt
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 internal fun LyricsSettingsDialog(visible: Boolean, settings: DesktopLyricsSettings, offsetMs: Long, enabled: Boolean,
                                    onChange: (DesktopLyricsSettings) -> Unit, onOffset: (Long) -> Unit,
-                                   onImport: () -> Unit, onRestore: () -> Unit, onDismiss: () -> Unit) {
+                                   onImport: () -> Unit, onRestore: () -> Unit, onDismiss: () -> Unit,
+                                   onOnline: () -> Unit = {}) {
     val presence = remember { MutableTransitionState(false) }
     presence.targetState = visible
     val scrim by animateFloatAsState(if (visible) .52f else 0f,
@@ -58,7 +59,7 @@ internal fun LyricsSettingsDialog(visible: Boolean, settings: DesktopLyricsSetti
                     Text("歌词设置", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 20.dp))
                     Box(Modifier.weight(1f, fill = false)) {
                         LyricsSettingsContent(settings, offsetMs, enabled, onChange, onOffset, onImport, onRestore,
-                            maximumHeight = contentHeight)
+                            maximumHeight = contentHeight, onOnline = onOnline)
                     }
                     Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.End) {
                         DesktopButton(onDismiss) { Text("完成") }
@@ -72,7 +73,8 @@ internal fun LyricsSettingsDialog(visible: Boolean, settings: DesktopLyricsSetti
 @Composable
 internal fun LyricsSettingsContent(settings: DesktopLyricsSettings, offsetMs: Long, enabled: Boolean,
                                   onChange: (DesktopLyricsSettings) -> Unit, onOffset: (Long) -> Unit,
-                                  onImport: () -> Unit, onRestore: () -> Unit, maximumHeight: Dp = 440.dp) {
+                                  onImport: () -> Unit, onRestore: () -> Unit, maximumHeight: Dp = 440.dp,
+                                  onOnline: () -> Unit = {}) {
     var tab by remember { mutableIntStateOf(0) }
             Column(Modifier.width(480.dp).height(maximumHeight)) {
                 DesktopChoiceRow(listOf("文本", "动画", "背景"), tab, { tab = it }, Modifier.fillMaxWidth())
@@ -82,6 +84,8 @@ internal fun LyricsSettingsContent(settings: DesktopLyricsSettings, offsetMs: Lo
                 ScrollableColumn(Modifier.fillMaxSize().padding(bottom = 4.dp)) {
                     when (selectedTab) {
                         0 -> {
+                            DesktopButton(onOnline, Modifier.fillMaxWidth(), enabled = enabled) { Text("联网下载歌词") }
+                            Spacer(Modifier.height(12.dp))
                             DesktopSettingsGroup {
                             Text("MiSans", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(bottom = 6.dp))

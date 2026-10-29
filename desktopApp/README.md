@@ -1,4 +1,4 @@
-# SyncTone for Windows 0.5.0
+# SyncTone for Windows
 
 Windows x64 本地音乐播放器，使用 Compose Multiplatform/JVM 和 libVLC。
 从仓库根目录运行构建任务，保留 `app/` 和 `sharedButtons/` 共享源码及资源。
