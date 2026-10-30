@@ -49,7 +49,6 @@ import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -69,13 +68,6 @@ import dev.salt.replica.ui.theme.hyperClickable
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
-
-private fun lerpRect(a: Rect, b: Rect, t: Float): Rect = Rect(
-    a.left + (b.left - a.left) * t,
-    a.top + (b.top - a.top) * t,
-    a.right + (b.right - a.right) * t,
-    a.bottom + (b.bottom - a.bottom) * t
-)
 
 /**
  * Container transform: the tapped card grows into a full-screen surface while the cover travels to
@@ -135,13 +127,14 @@ fun DetailOverlay(
     val p = progress.coerceIn(0f, 1f)
     val headerPx = min(viewport.width * .92f, with(density) { 360.dp.toPx() })
     val headerRect = Rect(0f, 0f, viewport.width, headerPx)
-    val surface = lerpRect(request.cardRect, viewport, p)
+    val surface = cardTransitionRect(request.cardRect, viewport, p)
     val coverT = smoothRange(p, .10f, 1f)
     val arc = (sin(Math.PI * p).toFloat()) * with(density) { 26.dp.toPx() }
-    val coverRect = lerpRect(request.coverRect, headerRect, coverT).translate(0f, arc)
-    val radiusT = smoothRange(p, .70f, 1f)
-    val surfaceRadius = (1f - radiusT) * with(density) { request.startRadius.toPx() }
-    val coverRadius = (1f - smoothRange(coverT, .66f, 1f)) * with(density) { 14.dp.toPx() }
+    val coverRect = cardTransitionRect(request.coverRect, headerRect, coverT).translate(0f, arc)
+    val expandedRadius = with(density) { CARD_EXPANDED_RADIUS_DP.dp.toPx() }
+    val surfaceRadius = cardTransitionRadius(with(density) { request.startRadius.toPx() }, expandedRadius, p)
+    val coverRadius = cardTransitionRadius(with(density) { 14.dp.toPx() }, expandedRadius, coverT)
+    val scrimAlpha = detailCoverScrimAlpha(p)
     val contentAlpha = smoothRange(p, .60f, 1f)
     val cardTextAlpha = when {
         target.kind == LibraryKind.FAVORITES -> 1f - smoothRange(p, .08f, .30f)
@@ -151,7 +144,6 @@ fun DetailOverlay(
     val accentColor = request.accent
     val surfaceColor = lerp(request.homeFavoriteColors?.surface ?: accentColor ?: MaterialTheme.colorScheme.surface,
         MaterialTheme.colorScheme.background, p)
-    val outlineColor = MaterialTheme.colorScheme.outlineVariant
     val coverWidth = with(density) { coverRect.width.toDp() }
     val coverHeight = with(density) { coverRect.height.toDp() }
     val headerHeight = with(density) { headerPx.toDp() }
@@ -164,15 +156,6 @@ fun DetailOverlay(
                 size = surface.size,
                 cornerRadius = CornerRadius(surfaceRadius)
             )
-            if (p < .98f && request.homeFavoriteColors == null) {
-                drawRoundRect(
-                    color = outlineColor.copy(alpha = (1f - p) * .9f),
-                    topLeft = surface.topLeft,
-                    size = surface.size,
-                    cornerRadius = CornerRadius(surfaceRadius),
-                    style = Stroke(width = with(density) { .7.dp.toPx() })
-                )
-            }
         }
 
         Box(
@@ -248,7 +231,7 @@ fun DetailOverlay(
                         .fillMaxSize()
                         .background(
                             Brush.verticalGradient(
-                                0f to Color.Black.copy(alpha = .55f * p),
+                                0f to Color.Black.copy(alpha = .55f * scrimAlpha),
                                 .40f to Color.Transparent
                             )
                         )
@@ -260,7 +243,7 @@ fun DetailOverlay(
                             Brush.verticalGradient(
                                 0f to Color.Transparent,
                                 .68f to Color.Transparent,
-                                1f to surfaceColor
+                                1f to surfaceColor.copy(alpha = scrimAlpha)
                             )
                         )
                 )
@@ -307,7 +290,7 @@ fun DetailOverlay(
                     letterSpacing = 1.5.sp, color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    title, fontSize = 27.sp, fontWeight = FontWeight.SemiBold,
+                    title, fontSize = 27.sp, lineHeight = 34.sp, fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onBackground, maxLines = 2, overflow = TextOverflow.Ellipsis
                 )
                 Text(

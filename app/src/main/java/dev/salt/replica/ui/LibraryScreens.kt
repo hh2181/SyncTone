@@ -312,12 +312,14 @@ private fun LibraryTile(
 ) {
     var cardRect by remember { mutableStateOf(Rect.Zero) }
     var coverRect by remember { mutableStateOf(Rect.Zero) }
-    HyperCard(
-        modifier = Modifier
+    Column(
+        Modifier
             .fillMaxWidth()
-            .onGloballyPositioned { cardRect = it.boundsInRoot() },
-        shape = RoundedCornerShape(20.dp),
-        onClick = { onOpen(cardRect, coverRect) }
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .onGloballyPositioned { cardRect = it.boundsInRoot() }
+            // A second press-scale would change the captured shared-element bounds.
+            .hyperClickable(pressedScale = 1f) { onOpen(cardRect, coverRect) }
     ) {
         Column(Modifier.padding(8.dp)) {
             Artwork(

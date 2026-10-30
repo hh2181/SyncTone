@@ -142,11 +142,11 @@ fun HyperTheme(dark: Boolean, content: @Composable () -> Unit) {
 
 /** Press feedback in the HyperOS manner: the surface dips slightly instead of showing a hard ripple. */
 @Composable
-fun Modifier.hyperClickable(enabled: Boolean = true, onClick: () -> Unit): Modifier {
+fun Modifier.hyperClickable(enabled: Boolean = true, pressedScale: Float = .975f, onClick: () -> Unit): Modifier {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) .975f else 1f,
+        targetValue = if (pressed) pressedScale else 1f,
         animationSpec = spring(dampingRatio = .7f, stiffness = 620f),
         label = "hyper-press"
     )

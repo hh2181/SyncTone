@@ -10,10 +10,13 @@ import dev.salt.replica.lyrics.online.*
 import dev.salt.desktop.lyrics.DesktopLyricsSettings
 import dev.salt.desktop.statistics.DesktopStatistics
 import dev.salt.desktop.sync.DesktopSyncRepository
+import dev.salt.replica.equalizer.EqualizerRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.nio.file.Files
@@ -71,6 +74,7 @@ class DesktopPlayerStore(
     val timeline = PlaybackTimeline()
     val statistics = DesktopStatistics()
     val sync = DesktopSyncRepository(library, statistics)
+    val equalizer = EqualizerRepository(repository.directory.resolve("equalizer-presets.json").toFile())
 
     init {
         scope.launch {
@@ -114,6 +118,12 @@ class DesktopPlayerStore(
                     withContext(audio) {
                         try { engine = engineFactory() }
                         catch (e: LinkageError) { throw IllegalStateException("无法加载播放内核：${e.message}", e) }
+                        engine?.setEqualizer(equalizer.state.value.config)
+                    }
+                    scope.launch {
+                        equalizer.state.map { it.config }.distinctUntilChanged().collect { config ->
+                            withContext(audio) { engine?.setEqualizer(config) }
+                        }
                     }
                     val tracks = library.state.value.tracks
                     withContext(audio) { engine!!.setVolume(saved.volume) }
@@ -157,7 +167,10 @@ class DesktopPlayerStore(
                     delay(100)
                     operations.withLock {
                         try {
-                            val snapshot = withContext(audio) { engine?.snapshot() } ?: return@withLock
+                            val snapshot = withContext(audio) {
+                                engine?.equalizerRuntime()?.let { equalizer.reportRuntime(it) }
+                                engine?.snapshot()
+                            } ?: return@withLock
                             statistics.sample(snapshot.status == AudioStatus.Playing, System.currentTimeMillis(), monotonicTime() / 1_000_000)
                             val target = pendingSeek
                             if (target != null && snapshot.status in listOf(AudioStatus.Playing, AudioStatus.Paused)) {
@@ -171,7 +184,7 @@ class DesktopPlayerStore(
                             if (snapshot.status == AudioStatus.Ended) advance(1, automatic = true)
                             if (snapshot.status == AudioStatus.Failed && !failedReported) {
                                 failedReported = true
-                                report("无法解码此文件，请尝试其他音频。")
+                                report(equalizer.runtime.value.error ?: "无法解码此文件，请尝试其他音频。")
                             }
                             state.value.sleepAt?.let { deadline ->
                                 if (System.currentTimeMillis() >= deadline) {
@@ -343,6 +356,7 @@ class DesktopPlayerStore(
                 }
                 finally {
                     withContext(audio) { engine?.close() }
+                    equalizer.close()
                     audio.close()
                 }
             }

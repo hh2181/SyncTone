@@ -36,6 +36,7 @@ import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import dev.salt.replica.playback.PlayerStore
 import dev.salt.replica.ui.ReplicaSettings
@@ -125,10 +126,14 @@ fun LyricsView(store: PlayerStore, settings: ReplicaSettings, modifier: Modifier
     }
     val active by remember(lyrics, position) { derivedStateOf { lyrics.indexAt(position.value) } }
     if (compact) {
-        lyrics.lines.getOrNull(active)?.let { line ->
-            KaraokeLine(line, position, true, false, settings,
-                modifier.padding(top = 8.dp), true, onLongPress, onTap, contentColor = contentColor)
-        } ?: Spacer(modifier)
+        BoxWithConstraints(modifier) {
+            val typography = compactLyricsTypography(maxWidth.value)
+            lyrics.lines.getOrNull(active)?.let { line ->
+                KaraokeLine(line, position, true, false, settings,
+                    Modifier.fillMaxWidth().padding(top = 8.dp), true, onLongPress, onTap,
+                    contentColor = contentColor, compactTypography = typography)
+            }
+        }
         return
     }
     val state = rememberLazyListState()
@@ -255,8 +260,9 @@ fun LyricsView(store: PlayerStore, settings: ReplicaSettings, modifier: Modifier
 private fun KaraokeLine(line: LyricLine, position: State<Long>, active: Boolean, played: Boolean, settings: ReplicaSettings,
                         modifier: Modifier, compact: Boolean, onLongPress: () -> Unit, onClick: () -> Unit,
                         prepareGlyphs: Boolean = false,
-                        contentColor: Color = Color.White) {
-    val size = if (compact) 12f else settings.fontSize
+                        contentColor: Color = Color.White,
+                        compactTypography: CompactLyricsTypography? = null) {
+    val size = if (compact) compactTypography?.originalSp ?: 16f else settings.fontSize
     val highlight = animateFloatAsState(if (active || compact) 1f else 0f,
         tween(lyricDuration(700, settings.lyricSpeed), easing = lyricEasing(settings.lyricCurve)), label = "lyricHighlight")
     val baseline = animateFloatAsState(if (played || compact) 0f else 1f,
@@ -269,7 +275,8 @@ private fun KaraokeLine(line: LyricLine, position: State<Long>, active: Boolean,
     Column(modifier.combinedClickable(interactionSource = interaction, indication = null,
         onClick = onClick, onLongClick = onLongPress)) {
         KaraokeText(line.cells, line.text, position, active, played, style, highlight, baseline,
-            prepareGlyphs && !compact && line.cells.size > 1, if (compact) 0f else .1f, settings.glow)
+            prepareGlyphs && !compact && line.cells.size > 1, if (compact) 0f else .1f, settings.glow,
+            maxLines = if (compact) 2 else Int.MAX_VALUE)
         AnimatedVisibility(
             visible = settings.translation && line.translation.isNotEmpty(),
             enter = fadeIn(tween(lyricDuration(300, settings.lyricSpeed), easing = lyricEasing(settings.lyricCurve))) +
@@ -278,10 +285,19 @@ private fun KaraokeLine(line: LyricLine, position: State<Long>, active: Boolean,
                 shrinkVertically(tween(lyricDuration(300, settings.lyricSpeed), easing = lyricEasing(settings.lyricCurve)), shrinkTowards = Alignment.Top),
             label = "lyricTranslation"
         ) {
-            val subStyle = style.copy(fontSize = (if (compact) size else size * .8f).sp,
-                lineHeight = (size * if (compact) 1.4f else 1.04f).sp)
+            val secondarySize = if (compact) compactTypography?.secondarySp ?: 14f else size * .8f
+            val subStyle = style.copy(fontSize = secondarySize.sp,
+                lineHeight = (if (compact) secondarySize * 1.4f else size * 1.04f).sp)
             val subModifier = Modifier.fillMaxWidth().padding(top = if (compact) 0.dp else 4.dp)
-            if (compact || line.subLines.none { it.wordTimed }) {
+            if (compact) {
+                val lines = line.subLines.map { it.text }.ifEmpty { line.translation.lines() }
+                Column(subModifier) {
+                    lines.filter { it.isNotBlank() }.take(2).forEach { text ->
+                        Text(text, Modifier.fillMaxWidth(), color = contentColor, style = subStyle,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            } else if (line.subLines.none { it.wordTimed }) {
                 Text(line.translation, subModifier, color = contentColor.copy(alpha = if (compact) 1f else .30f), style = subStyle)
             } else Column(subModifier) {
                 line.subLines.forEach { sub ->
@@ -298,14 +314,15 @@ private fun KaraokeLine(line: LyricLine, position: State<Long>, active: Boolean,
 @Composable
 private fun KaraokeText(cells: List<LyricCell>, text: String, position: State<Long>, active: Boolean,
                         played: Boolean, style: TextStyle, highlight: State<Float>, baseline: State<Float>,
-                        prepareGlyphs: Boolean, liftFraction: Float, glow: Boolean) {
+                        prepareGlyphs: Boolean, liftFraction: Float, glow: Boolean, maxLines: Int = Int.MAX_VALUE) {
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer(cacheSize = 32)
     val longNote = remember(cells) { LongNoteEnvelope(cells) }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val widthPx = with(density) { maxWidth.roundToPx() }
-        val layout = remember(text, style, widthPx, density) {
-            measurer.measure(AnnotatedString(text), style.copy(color = Color.White), constraints = Constraints(maxWidth = widthPx))
+        val layout = remember(text, style, widthPx, density, maxLines) {
+            measurer.measure(AnnotatedString(text), style.copy(color = Color.White), constraints = Constraints(maxWidth = widthPx),
+                maxLines = maxLines, overflow = if (maxLines == Int.MAX_VALUE) TextOverflow.Clip else TextOverflow.Ellipsis)
         }
         // Compose's Android text painter shares scratch state; only bitmap processing is concurrent.
         val raster = if (prepareGlyphs)

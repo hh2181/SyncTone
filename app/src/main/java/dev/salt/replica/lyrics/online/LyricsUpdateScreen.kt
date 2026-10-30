@@ -60,7 +60,7 @@ private fun <T> moved(list: List<T>, item: T, direction: Int): List<T> = list.to
 /** Pager keeps the outgoing and incoming cards mounted throughout the horizontal transition. */
 @Composable
 fun LyricsUpdateScreen(controller: OnlineLyricsController, modifier: Modifier = Modifier, onMenu: (() -> Unit)? = null,
-                       pagerState: PagerState = rememberPagerState { 3 }) {
+                       pagerState: PagerState = rememberPagerState { 3 }, pagerModifier: Modifier = Modifier) {
     val state by controller.state.collectAsState()
     val scope = rememberCoroutineScope()
     var picker by remember { mutableStateOf(false) }
@@ -111,7 +111,7 @@ fun LyricsUpdateScreen(controller: OnlineLyricsController, modifier: Modifier = 
                     SyncToneIconButton(controller::dismissMessage) { Icon(Icons.Default.Close, "关闭提示", Modifier.size(16.dp)) }
                 }
             }
-            HorizontalPager(state = pagerState, modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds(),
+            HorizontalPager(state = pagerState, modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds().then(pagerModifier),
                 beyondViewportPageCount = 1, userScrollEnabled = !picker && !mobilePreview, key = { it }) { index ->
                 when (index) {
                     0 -> SearchUpdatePage(state, controller, wide, pagerState.currentPage == 0,

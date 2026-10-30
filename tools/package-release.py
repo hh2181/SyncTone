@@ -20,6 +20,7 @@ def digest(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT.parent / 'deliverables')
+    parser.add_argument('--archive-only', action='store_true', help='Export the Windows zip without a duplicate extracted folder.')
     args = parser.parse_args()
     android_config = (ROOT / 'app/build.gradle.kts').read_text(encoding='utf-8')
     windows_config = (ROOT / 'desktopApp/build.gradle.kts').read_text(encoding='utf-8')
@@ -38,32 +39,41 @@ def main():
     checksums = destination / f'Release-{version}/SHA256SUMS.txt'
     if any(path.exists() for path in (windows_folder, apk, archive, checksums)):
         raise FileExistsError('Release outputs already exist; use a new --output directory.')
-    windows_folder.mkdir(parents=True)
-    for path in sorted(source.rglob('*')):
-        relative = path.relative_to(source)
-        if not path.is_file() or relative.parts[0] in {'data', 'portable'}:
-            continue
-        target = windows_folder / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, target)
-    shutil.copy2(ROOT / 'THIRD_PARTY_NOTICES.md', windows_folder / 'THIRD_PARTY_NOTICES.md')
-    (windows_folder / 'README.txt').write_text(
+    if not args.archive_only:
+        windows_folder.mkdir(parents=True)
+        for path in sorted(source.rglob('*')):
+            relative = path.relative_to(source)
+            if not path.is_file() or relative.parts[0] in {'data', 'portable'}:
+                continue
+            target = windows_folder / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
+        shutil.copy2(ROOT / 'THIRD_PARTY_NOTICES.md', windows_folder / 'THIRD_PARTY_NOTICES.md')
+    readme = (
         f'SyncTone {version} for Windows x64\n\n'
         'Extract this entire SyncTone folder before running SyncTone.exe.\n'
         'User data is stored in data/ beside the EXE; logs and temporary files use portable/.\n'
         'Keep a backup of data/ when upgrading or moving your music library.\n'
         'This release package does not include development machine user data.\n'
-        'See THIRD_PARTY_NOTICES.md and app/resources/vlc/COPYING.txt for third-party notices.\n',
-        encoding='utf-8')
+        'Equalizer processing uses the default audio device at 48 kHz / 16-bit / stereo.\n'
+        'See THIRD_PARTY_NOTICES.md and app/resources/vlc/COPYING.txt for third-party notices.\n')
+    if not args.archive_only:
+        (windows_folder / 'README.txt').write_text(readme, encoding='utf-8')
     apk.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(apk_source, apk)
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as package:
-        for path in sorted(windows_folder.rglob('*')):
+        archive_source = source if args.archive_only else windows_folder
+        for path in sorted(archive_source.rglob('*')):
             if path.is_file():
-                relative = path.relative_to(windows_folder)
+                relative = path.relative_to(archive_source)
                 if relative.parts[0] in {'data', 'portable'}:
+                    if args.archive_only:
+                        continue
                     raise ValueError(f'User data cannot be packaged: {relative}')
                 package.write(path, f'SyncTone/{relative.as_posix()}')
+        if args.archive_only:
+            package.write(ROOT / 'THIRD_PARTY_NOTICES.md', 'SyncTone/THIRD_PARTY_NOTICES.md')
+            package.writestr('SyncTone/README.txt', readme)
     checksums.parent.mkdir(parents=True, exist_ok=True)
     checksums.write_text(''.join(f'{digest(path)}  {path.name}\n' for path in (apk, archive)),
                          encoding='ascii', newline='\n')

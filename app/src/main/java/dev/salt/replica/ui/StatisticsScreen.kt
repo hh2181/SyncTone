@@ -40,7 +40,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -50,7 +49,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -94,6 +95,7 @@ private class StatTransition(val request: StatLaunch) {
     val progress = Animatable(0f)
     var job: Job? = null
     var targetArt by mutableStateOf<Rect?>(null)
+    var pageCoordinates: LayoutCoordinates? = null
 }
 
 private val StatGreen = Color(0xFF249773)
@@ -156,7 +158,7 @@ fun StatisticsScreen(store: PlayerStore, onMenu: () -> Unit, playerExpanded: Boo
             // Let the new lazy content lay out before starting the visible transform.
             withFrameNanos { }
             withFrameNanos { }
-            transition.progress.animateTo(1f, tween(if (animationsEnabled) STATISTICS_OPEN_DURATION_MS else 0, easing = statisticsEasing(true)))
+            transition.progress.animateTo(1f, tween(if (animationsEnabled) STATISTICS_OPEN_DURATION_MS else 0, easing = CardOpenEasing))
         }
     }
     LaunchedEffect(stack.size) { onDetailActive(stack.isNotEmpty()) }
@@ -176,13 +178,11 @@ fun StatisticsScreen(store: PlayerStore, onMenu: () -> Unit, playerExpanded: Boo
       BoxWithConstraints(modifier) {
         val viewport = Rect(0f, 0f, with(density) { maxWidth.toPx() }, with(density) { maxHeight.toPx() })
         Box(Modifier.fillMaxSize().onGloballyPositioned { rootOrigin = it.boundsInRoot().topLeft }) {
-            val first = stack.firstOrNull()
-            val blurProgress = first?.progress?.value ?: 0f
             StatisticsOverview(
                 snapshot, state.loading, state.error, days, dayValues, hours, hourValues, artists, albums, art, zone, green,
                 onMenu, repository::refresh, ::open, { it.translate(-rootOrigin) },
                 stack.map { it.request.sourceKey }.toSet(),
-                Modifier.fillMaxSize().then(if (first != null && blurProgress < .999f) Modifier.blur((4 * blurProgress * (1 - blurProgress) * 2.5f).dp) else Modifier)
+                Modifier.fillMaxSize()
             )
             stack.forEachIndexed { index, transition ->
                 key(transition) {
@@ -291,7 +291,7 @@ private fun StatisticWidget(key: String, destination: StatDestination, title: St
     val body: @Composable (Boolean) -> Unit = { _ -> GraphWidget(title, icon, subtitle, windows, values, color, daily, loading, zone) }
     Box(Modifier.fillMaxWidth().aspectRatio(2f).onGloballyPositioned { rect = localRect(it.boundsInRoot()) }
         .graphicsLayer { alpha = if (key in hidden) 0f else 1f }
-        .hyperClickable(enabled = !loading) { onOpen(StatLaunch(destination, key, rect, null, null, 0f, body)) }) { body(false) }
+        .hyperClickable(enabled = !loading, pressedScale = 1f) { onOpen(StatLaunch(destination, key, rect, null, null, 0f, body)) }) { body(false) }
 }
 
 @Composable
@@ -317,7 +317,7 @@ private fun EntityWidget(artist: Boolean, entity: EntityStatistic?, art: Map<Str
     val density = LocalDensity.current
     val body: @Composable (Boolean) -> Unit = { hideArt -> EntityWidgetContent(artist, entity, bitmap, loading, hideArt) }
     Box(modifier.onGloballyPositioned { rect = localRect(it.boundsInRoot()) }.graphicsLayer { alpha = if (key in hidden) 0f else 1f }
-        .hyperClickable(enabled = !loading) {
+        .hyperClickable(enabled = !loading, pressedScale = 1f) {
             onOpen(StatLaunch(StatDestination(if (artist) StatPage.ARTISTS else StatPage.ALBUMS), key, rect, cover.takeIf { entity != null }, bitmap,
                 with(density) { (if (artist) 25.dp else 11.dp).toPx() }, body))
         }) {
@@ -456,27 +456,33 @@ private fun StatisticsOverlay(
     val density = LocalDensity.current
     val request = transition.request
     val radius = with(density) { 26.dp.toPx() }
-    val arc = with(density) { 76.dp.toPx() }
+    val expandedRadius = with(density) { CARD_EXPANDED_RADIUS_DP.dp.toPx() }
+    val arc = with(density) { 26.dp.toPx() }
     val surface = MaterialTheme.colorScheme.surface
     val background = MaterialTheme.colorScheme.background
-    val geometry = { statisticsGeometry(request.rect, viewport, transition.progress.value, radius, arc) }
+    val geometry = { statisticsGeometry(request.rect, viewport, transition.progress.value, radius, expandedRadius) }
     val cover = request.artRect
     val hasSharedArt = cover != null
     val phase: (Float, Float) -> Modifier = { start, end -> Modifier.graphicsLayer {
         val alphaProgress = smoothRange(transition.progress.value, start, end)
-        alpha = alphaProgress; translationY = (1 - alphaProgress) * 18.dp.toPx()
+        alpha = alphaProgress; translationY = (1 - alphaProgress) * 14.dp.toPx()
     } }
-    val targetArtModifier = if (hasSharedArt) Modifier.graphicsLayer { alpha = smoothRange(transition.progress.value, .88f, .995f) } else Modifier
+    // The artwork anchor stays in the final page's layout coordinates. Only its
+    // opacity changes, so measuring it never feeds animated transforms back into its path.
+    val anchorPhase: (Float, Float) -> Modifier = { start, end -> Modifier.graphicsLayer {
+        alpha = smoothRange(transition.progress.value, start, end)
+    } }
+    val targetArtModifier = if (hasSharedArt) Modifier.graphicsLayer {
+        alpha = if (transition.progress.value == 1f && !transition.progress.isRunning) 1f else 0f
+    }.onGloballyPositioned { coordinates ->
+        val page = transition.pageCoordinates
+        if (page != null && page.isAttached && coordinates.isAttached) {
+            val target = page.localBoundingBoxOf(coordinates, clipBounds = false)
+            val old = transition.targetArt
+            if (old == null || (!transition.progress.isRunning && old != target)) transition.targetArt = target
+        }
+    } else Modifier
     val targetLabelModifier = if (hasSharedArt) Modifier.graphicsLayer { alpha = smoothRange(transition.progress.value, .68f, .94f) } else Modifier
-    val onTargetArt: (Rect) -> Unit = { measured ->
-        val current = geometry().rect
-        val scale = current.width / viewport.width
-        val relative = measured.translate(-rootOrigin)
-        val target = Rect((relative.left - current.left) / scale, (relative.top - current.top) / scale,
-            (relative.right - current.left) / scale, (relative.bottom - current.top) / scale)
-        val old = transition.targetArt
-        if (old == null || kotlin.math.abs(old.left - target.left) > .5f || kotlin.math.abs(old.top - target.top) > .5f || kotlin.math.abs(old.width - target.width) > .5f) transition.targetArt = target
-    }
     Box(Modifier.fillMaxSize().graphicsLayer {
         val g = geometry(); shape = StatisticsClip(g.rect, g.radius); clip = true
     }.pointerInput(active) { detectTapGestures { } }) {
@@ -484,40 +490,33 @@ private fun StatisticsOverlay(
             val g = geometry()
             drawRoundRect(lerp(surface, background, smoothRange(transition.progress.value, .25f, .90f)), g.rect.topLeft, g.rect.size, CornerRadius(g.radius))
         }
-        Box(Modifier.fillMaxSize().graphicsLayer {
-            val rect = geometry().rect
-            transformOrigin = TransformOrigin(0f, 0f)
-            translationX = rect.left; translationY = rect.top
-            scaleX = rect.width / viewport.width; scaleY = scaleX
-        }) {
+        Box(Modifier.fillMaxSize().onPlaced { transition.pageCoordinates = it }) {
             StatisticsDetailPage(request.destination, snapshot, days, dayValues, hours, hourValues, artists, albums, art, zone, green,
-                active, hidden, { it.translate(-rootOrigin) }, phase, targetArtModifier, targetLabelModifier, onTargetArt, onOpen, onClose)
+                active, hidden, { it.translate(-rootOrigin) }, phase, anchorPhase, targetArtModifier, targetLabelModifier, onOpen, onClose)
         }
         Box(Modifier.size(with(density) { request.rect.width.toDp() }, with(density) { request.rect.height.toDp() }).graphicsLayer {
             val p = transition.progress.value
             val rect = geometry().rect
-            val scale = 1 + .035f * smoothRange(p, 0f, .62f)
-            transformOrigin = TransformOrigin(0f, 0f)
-            translationX = rect.left + (rect.width - request.rect.width * scale) / 2
-            translationY = rect.top + (rect.height - request.rect.height * scale) / 2
-            scaleX = scale; scaleY = scale
-            alpha = 1 - smoothRange(p, .12f, .62f)
+            translationX = rect.left; translationY = rect.top
+            alpha = 1 - smoothRange(p, .10f, .40f)
         }) { request.source(hasSharedArt) }
         if (cover != null) {
             Box(Modifier.size(with(density) { cover.width.toDp() }, with(density) { cover.height.toDp() }).graphicsLayer {
                 val p = transition.progress.value
-                val q = smoothRange(p, .12f, .92f)
-                val destination = transition.targetArt ?: Rect(with(density) { 44.dp.toPx() }, with(density) { 150.dp.toPx() }, with(density) { 92.dp.toPx() }, with(density) { 198.dp.toPx() })
+                val q = smoothRange(p, .10f, 1f)
+                val destination = transition.targetArt ?: cover
                 val w = cover.width + (destination.width - cover.width) * q
                 val h = cover.height + (destination.height - cover.height) * q
-                val center = statisticsPath(cover.center, destination.center + viewport.topLeft, q, arc * .32f)
+                val center = statisticsPath(cover.center, destination.center, q, arc)
                 transformOrigin = TransformOrigin(0f, 0f)
                 translationX = center.x - w / 2; translationY = center.y - h / 2
                 scaleX = w / cover.width; scaleY = h / cover.height
                 val endRadius = with(density) { (if (request.destination.page in listOf(StatPage.ARTIST, StatPage.ALBUM)) 17.dp else 11.dp).toPx() }
                 val artRadius = request.artRadius + (endRadius - request.artRadius) * q
                 shape = RoundedCornerShape(with(density) { (artRadius / scaleX.coerceAtLeast(.01f)).toDp() }); clip = true
-                alpha = 1 - smoothRange(p, .88f, .995f)
+                // Exactly one image owns the transition. At the endpoint both layouts
+                // share the same bounds/radius; no late cross-fade between moving images.
+                alpha = if (transition.targetArt == null || (p == 1f && !transition.progress.isRunning)) 0f else 1f
             }) { Artwork(request.artwork, Modifier.fillMaxSize()) }
         }
     }
@@ -529,8 +528,9 @@ private fun StatisticsDetailPage(
     days: List<StatWindow>, dayValues: List<Double>, hours: List<StatWindow>, hourValues: List<Double>,
     artists: List<EntityStatistic>, albums: List<EntityStatistic>, art: Map<String, Bitmap?>,
     zone: ZoneId, green: Color, active: Boolean, hidden: Set<String>, localRect: (Rect) -> Rect,
-    phase: (Float, Float) -> Modifier, targetArtModifier: Modifier, targetLabelModifier: Modifier,
-    onTargetArt: (Rect) -> Unit, onOpen: (StatLaunch) -> Unit, onClose: () -> Unit
+    phase: (Float, Float) -> Modifier, anchorPhase: (Float, Float) -> Modifier,
+    targetArtModifier: Modifier, targetLabelModifier: Modifier,
+    onOpen: (StatLaunch) -> Unit, onClose: () -> Unit
 ) {
     val entities = if (destination.page in listOf(StatPage.ARTISTS, StatPage.ARTIST)) artists else albums
     val entity = entities.firstOrNull { it.key == destination.key }
@@ -561,7 +561,7 @@ private fun StatisticsDetailPage(
                     IconButton(onClose, enabled = active, modifier = Modifier.size(40.dp)) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回统计", Modifier.size(21.dp)) }
                     Spacer(Modifier.weight(1f)); MutedText("播放统计")
                 }
-                Text(title, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp, bottom = 6.dp))
+                Text(title, fontSize = 26.sp, lineHeight = 34.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp, bottom = 6.dp))
                 Text(period, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, modifier = Modifier.padding(bottom = if (isTime) 4.dp else 18.dp))
                 if (isTime) Text("GMT${Instant.ofEpochMilli(range.end - 1).atZone(zone).offset.id.replace("Z", "+00:00")}", fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 16.dp))
@@ -571,12 +571,13 @@ private fun StatisticsDetailPage(
             if (entities.isEmpty()) item { StatEmpty(modifier = phase(.39f, .84f).clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.surface)) }
             itemsIndexed(entities, key = { _, item -> item.key }) { index, item ->
                 val bitmap = item.songs.firstNotNullOfOrNull { art[it.track.id] }
-                Column(phase(.38f + min(index, 5) * .025f, .77f + min(index, 5) * .025f)
+                val rowPhase = if (index == 0) anchorPhase(.38f, .77f)
+                    else phase(.38f + min(index, 5) * .025f, .77f + min(index, 5) * .025f)
+                Column(rowPhase
                     .clip(statisticsRankShape(index == 0, index == entities.lastIndex))) {
                     EntityRankRow(destination, item, index, bitmap, hidden, localRect, onOpen,
                         if (index == 0) targetArtModifier else Modifier,
-                        if (index == 0) targetLabelModifier else Modifier,
-                        if (index == 0) onTargetArt else null, Modifier, active)
+                        if (index == 0) targetLabelModifier else Modifier, Modifier, active)
                     if (index != entities.lastIndex) StatDivider()
                 }
             }
@@ -607,13 +608,8 @@ private fun StatisticsDetailPage(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
             } else item("entity-summary") {
-                Row(Modifier.fillMaxWidth().padding(vertical = 10.dp).then(phase(.28f, .72f)), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Artwork(entity?.songs?.firstNotNullOfOrNull { art[it.track.id] }, Modifier.size(65.dp).clip(RoundedCornerShape(17.dp)).then(targetArtModifier)
-                        .onGloballyPositioned { coordinates ->
-                            val top = coordinates.localToRoot(Offset.Zero)
-                            val bottom = coordinates.localToRoot(Offset(coordinates.size.width.toFloat(), coordinates.size.height.toFloat()))
-                            onTargetArt(Rect(top, bottom))
-                        })
+                Row(Modifier.fillMaxWidth().padding(vertical = 10.dp).then(anchorPhase(.28f, .72f)), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Artwork(entity?.songs?.firstNotNullOfOrNull { art[it.track.id] }, Modifier.size(65.dp).clip(RoundedCornerShape(17.dp)).then(targetArtModifier))
                     Column(targetLabelModifier) { Text("${countText(entity?.plays ?: 0)} 次", fontSize = 24.sp, fontWeight = FontWeight.Medium); MutedText("${entity?.songs?.size ?: 0} 首歌曲") }
                 }
             }
@@ -637,7 +633,7 @@ private fun StatisticsDetailPage(
 @Composable
 private fun EntityRankRow(parent: StatDestination, entity: EntityStatistic, index: Int, bitmap: Bitmap?, hidden: Set<String>,
                           localRect: (Rect) -> Rect, onOpen: (StatLaunch) -> Unit, artModifier: Modifier,
-                          labelModifier: Modifier, onTargetArt: ((Rect) -> Unit)?, modifier: Modifier, active: Boolean) {
+                          labelModifier: Modifier, modifier: Modifier, active: Boolean) {
     var rect by remember { mutableStateOf(Rect.Zero) }
     var cover by remember { mutableStateOf<Rect?>(null) }
     val density = LocalDensity.current
@@ -651,7 +647,7 @@ private fun EntityRankRow(parent: StatDestination, entity: EntityStatistic, inde
                 with(density) { 11.dp.toPx() }, body))
         }) {
         EntityRankContent(entity, index, bitmap, false, artModifier, labelModifier) { measured ->
-            cover = localRect(measured); onTargetArt?.invoke(measured)
+            cover = localRect(measured)
         }
     }
 }

@@ -71,8 +71,13 @@ import androidx.core.view.WindowCompat
 import dev.salt.replica.QaRequest
 import dev.salt.replica.R
 import dev.salt.replica.lyrics.LyricsView
+import dev.salt.replica.lyrics.compactLyricsTypography
+import dev.salt.replica.lyrics.compactLyricsMinimumHeight
+import dev.salt.replica.lyrics.playerCoverSize
 import dev.salt.replica.lyrics.online.*
 import dev.salt.replica.playback.PlayerStore
+import dev.salt.replica.equalizer.AndroidEqualizer
+import dev.salt.replica.equalizer.EqualizerScreen
 import dev.salt.replica.playback.Playlist
 import dev.salt.replica.playback.Track
 import dev.salt.replica.ui.theme.HyperTheme
@@ -92,6 +97,7 @@ fun PlayerApp(store: PlayerStore, settings: ReplicaSettings, qa: QaRequest? = nu
     val scope = rememberCoroutineScope()
     val sheet = remember { PlayerSheetState(scope) }
     val pager = rememberPagerState { 2 }
+    val lyricsUpdatePager = rememberPagerState { 3 }
     var panel by remember { mutableStateOf<String?>(null) }
     val drawer = remember { DrawerState(scope) }
     val drawerDensity = LocalDensity.current
@@ -134,7 +140,7 @@ fun PlayerApp(store: PlayerStore, settings: ReplicaSettings, qa: QaRequest? = nu
             detailAnim.snapTo(0f)
             detailAnim.animateTo(
                 1f,
-                tween(520, easing = CubicBezierEasing(0.2f, 0.9f, 0.25f, 1f))
+                tween(CARD_OPEN_DURATION_MS, easing = CardOpenEasing)
             )
         }
     }
@@ -142,7 +148,7 @@ fun PlayerApp(store: PlayerStore, settings: ReplicaSettings, qa: QaRequest? = nu
     fun closeDetail() {
         if (detail == null) return
         scope.launch {
-            detailAnim.animateTo(0f, tween(300, easing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f)))
+            detailAnim.animateTo(0f, tween(CARD_CLOSE_DURATION_MS, easing = CardCloseEasing))
             detail = null
         }
     }
@@ -205,9 +211,15 @@ fun PlayerApp(store: PlayerStore, settings: ReplicaSettings, qa: QaRequest? = nu
             val p = { sheet.progress }
             val contentAlpha = { smoothRange(p(), .5f, .96f) }
             val headerY = 57.dp
-            val coverSize = (w - 60.dp).coerceAtMost(480.dp)
             val coverTop = 143.dp.coerceAtMost(h * .19f)
             val controlBottom = nav + 6.dp
+            val controlsReserve = 166.dp + with(density) { 16.sp.toDp() } + controlBottom
+            val previewTypography = compactLyricsTypography((w - 60.dp).value)
+            val previewMinHeight = with(density) { compactLyricsMinimumHeight(
+                (previewTypography.originalSp * 1.4f).sp.toDp().value,
+                (previewTypography.secondarySp * 1.4f).sp.toDp().value) }.dp
+            val coverSize = playerCoverSize(w.value, h.value, coverTop.value,
+                previewMinHeight.value, controlsReserve.value).dp
             val fullW = with(density) { w.toPx() }
             val fullH = with(density) { h.toPx() }
             val miniSurface = remember(fullW, travel, density.density) {
@@ -247,6 +259,11 @@ fun PlayerApp(store: PlayerStore, settings: ReplicaSettings, qa: QaRequest? = nu
                 Modifier.fillMaxSize().padding(top = topInset, bottom = miniHeight)
             }
             val swipeEnabled = !expanded && detail == null && !drawer.open && !statisticsDetailActive
+            val lyricsDrawerConnection = remember(drawer, lyricsUpdatePager, swipeEnabled, section) {
+                LyricsDrawerConnection(drawer) {
+                    swipeEnabled && section == "歌词更新" && !lyricsUpdatePager.canScrollBackward
+                }
+            }
             DrawerBlurHost(drawer) {
             Box(
                 Modifier
@@ -255,7 +272,7 @@ fun PlayerApp(store: PlayerStore, settings: ReplicaSettings, qa: QaRequest? = nu
                         if (!swipeEnabled) return@pointerInput
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
-                            if (section == "歌词更新" && down.position.x > 24.dp.toPx()) return@awaitEachGesture
+                            if (section == "歌词更新" && lyricsUpdatePager.canScrollBackward) return@awaitEachGesture
                             val tracker = VelocityTracker()
                             tracker.addPosition(down.uptimeMillis, down.position)
                             var dx = 0f
@@ -264,6 +281,9 @@ fun PlayerApp(store: PlayerStore, settings: ReplicaSettings, qa: QaRequest? = nu
                             while (true) {
                                 val event = awaitPointerEvent()
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                // Pager/scrollable children own their gesture; edge remainder
+                                // reaches the drawer through the nested-scroll connection.
+                                if (!active && section in listOf("歌词更新", "均衡器") && change.isConsumed) break
                                 tracker.addPosition(change.uptimeMillis, change.position)
                                 if (!change.pressed) break
                                 val delta = change.positionChange()
@@ -312,7 +332,9 @@ fun PlayerApp(store: PlayerStore, settings: ReplicaSettings, qa: QaRequest? = nu
                     "统计" -> StatisticsScreen(store, { drawer.open() }, surfaceVisible, { statisticsDetailActive = it }, dashboardModifier)
                     "连接" -> SyncScreen(store, { drawer.open() }, dashboardModifier)
                     "扫描音乐" -> MusicScanScreen({ drawer.open() }, dashboardModifier)
-                    "歌词更新" -> LyricsUpdateScreen(onlineLyrics, dashboardModifier, { drawer.open() })
+                    "歌词更新" -> LyricsUpdateScreen(onlineLyrics, dashboardModifier, { drawer.open() },
+                        pagerState = lyricsUpdatePager, pagerModifier = Modifier.nestedScroll(lyricsDrawerConnection))
+                    "均衡器" -> EqualizerScreen(AndroidEqualizer.get(context), dashboardModifier, { drawer.open() })
                     else -> HomeScreen(
                         store, darkTheme, { drawer.open() }, { picker.launch(arrayOf("audio/*")) },
                         { sheet.to(true) }, { track -> store.playTrack(track.id) },
@@ -384,10 +406,10 @@ fun PlayerApp(store: PlayerStore, settings: ReplicaSettings, qa: QaRequest? = nu
                                     Spacer(Modifier.size(coverSize).align(Alignment.CenterHorizontally)
                                         .clickable { scope.launch { pager.animateScrollToPage(1) } })
                                     Spacer(Modifier.height(16.dp))
-                                    LyricsView(store, settings, Modifier.fillMaxWidth().height(78.dp), compact = true,
+                                    LyricsView(store, settings, Modifier.fillMaxWidth().weight(1f), compact = true,
                                         contentColor = playerInk,
                                         onTap = { scope.launch { pager.animateScrollToPage(1) } })
-                                    Spacer(Modifier.height(182.dp + controlBottom))
+                                    Spacer(Modifier.height(controlsReserve))
                                 } else {
                                     LyricsView(store, settings,
                                         Modifier.weight(1f).fillMaxWidth().padding(start = 30.dp, end = 30.dp, top = 12.dp),
@@ -403,7 +425,8 @@ fun PlayerApp(store: PlayerStore, settings: ReplicaSettings, qa: QaRequest? = nu
                             .padding(horizontal = 30.dp).graphicsLayer {
                                 translationX = -pagePosition().coerceIn(0f, 1f) * fullW
                             },
-                            onMode = store::cycleMode, onTimer = { panel = "timer" }, onEffects = { panel = "volume" },
+                            onMode = store::cycleMode, onTimer = { panel = "timer" },
+                            onEffects = { panel = null; section = "均衡器"; sheet.to(false) },
                             onQueue = { panel = "queue" }, onMore = { panel = "lyrics" }, bottom = controlBottom)
                         LyricsFooter(store, settings, nav, Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(76.dp)
                             .graphicsLayer { translationX = (1f - pagePosition().coerceIn(0f, 1f)) * fullW },
@@ -608,7 +631,8 @@ private fun NavigationDrawer(
         "统计" to R.drawable.ic_nav_stats,
         "设置" to R.drawable.ic_nav_settings,
         "连接" to R.drawable.ic_nav_cast,
-        "歌词更新" to R.drawable.ic_nav_lyrics
+        "歌词更新" to R.drawable.ic_nav_lyrics,
+        "均衡器" to R.drawable.ic_audio_effect
     )
     Box(Modifier.fillMaxSize()) {
         Box(

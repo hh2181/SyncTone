@@ -17,12 +17,35 @@ Windows 还直接编译 `app/` 内部分平台无关的歌词、统计、同步�
 “歌词更新”的三个分页使用共用 HorizontalPager：420 ms 的非线性平移保持新旧卡片同时参与布局。
 批量任务串行执行，启动时固定规则，按歌曲 ID 保存，支持取消请求后的暂停续传；任务不保存到磁盘。
 原文、罗马音、翻译由 `LyricContent` 标注，保存时保留内容顺序；旧曲库和旧 LRC 仍可读取。
+Android 的歌词更新分页由 `PlayerApp` 持有状态，通过 `LyricsDrawerConnection` 接收分页最左端剩余的右滑距离。
+`LyricsUpdateScreen.pagerModifier` 用于接入该手势，桌面端保留默认分页行为。
+
+封面下方的简要歌词使用 `lyrics/CompactLyricsLayout.kt` 按逻辑宽度选择字号，正文 16–20 sp、次要内容至少 14 sp。
+布局通过 Compose 的 sp→dp 转换预留行高，并为播放控件保留空间；短屏缩小封面，避免通过压小歌词来容纳内容。
+大标题须显式设置匹配字号的行高，例如详情的 27 sp 字号配 34 sp 行高，避免继承正文行高导致换行重叠。
 
 移动端同类歌曲列表共用 `ui/MusicListComponents.kt`，以统计页的封面、字体和留白为基准。
 首页、曲库、详情和队列通过 `SongRow` 提供播放与更多操作，统计页提供播放次数和累计时长；
 使用 `MusicListCard / MusicListRow / MusicListMetric / MusicListDivider` 保持容器、排版和分隔线一致。
 歌曲点选以歌曲 ID 解析 Media3 的实际队列位置，避免直接把曲库、筛选结果或推荐列表的索引用于播放器。
 播放服务可以比界面存活更久，重新连接时须主动读取实际队列及当前播放状态，不能只等待新的播放事件。
+
+Android 卡片容器过渡的时长、曲线、边界和圆角规则共用 `ui/CardTransitionMotion.kt`。
+展开后的容器统一保留 28 dp 圆角，动画结束不转为直角；收回时连续恢复源卡片圆角。
+共享封面目标使用详情页内的布局坐标，在运动中固定；不要从正在缩放或平移的全局坐标反推目标位置。
+源卡片避免叠加按压缩放，封面渐变在收回终点须为透明，静态封面与运动封面应在相同边界交接。
+
+## 均衡器
+
+双端共用 `equalizer/EqualizerModel.kt`、`EqualizerDsp.kt`、`EqualizerRepository.kt` 和 Compose 页面。
+Android 的 `EqualizerAudioProcessor` 由 `PlaybackService` 持有，禁用浮点旁路输出；Windows 在 `VlcPcmOutput` 中接收 VLC 的 S16N PCM，按 VLC 时钟调度 JavaSound 输出。
+曲线与音频使用同一个系数设计函数，内部目标增益与校准后的滤波器增益分开，不能用 UI 样条代替实际频响。
+采样率、声道数和播放中参数更新需在正确的线程处理；seek／flush 清理滤波状态，关闭服务时释放订阅。
+设置保存在独立的 `equalizer-presets.json`，写入合并后原子替换，不保存处理后的音频。
+
+针对性检查：`EqualizerTest`（两端）、`playbackSmoke`、`equalizerVisualSmoke`。
+打包后可运行 `desktopApp/tools/verify-equalizer-package.ps1 -OutputDirectory <新的隔离目录>` 验证私有 JVM 的实际音频处理路径；完成后删除该隔离目录。
+用户说明与格式限制见 [均衡器说明](equalizer.md)。
 
 ## 构建
 

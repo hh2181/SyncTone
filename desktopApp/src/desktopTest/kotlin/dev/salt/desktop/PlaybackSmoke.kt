@@ -2,6 +2,7 @@ package dev.salt.desktop
 
 import dev.salt.desktop.library.DesktopTrackReader
 import dev.salt.desktop.playback.*
+import dev.salt.replica.equalizer.EqConfig
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 import java.nio.file.Files
@@ -27,6 +28,8 @@ fun main(args: Array<String>) = runBlocking {
     val records = mutableListOf<JsonObject>()
     withContext(Dispatchers.IO) {
         VlcAudioEngine().use { engine ->
+            val eq = EqConfig(true, listOf(-8, 0, 0, -68, -65, -26, 0, 0, 0, 0), false)
+            engine.setEqualizer(eq)
             suspend fun await(description: String, predicate: (AudioSnapshot) -> Boolean): AudioSnapshot = withTimeout(12_000) {
                 while (true) {
                     val snapshot = engine.snapshot()
@@ -39,6 +42,9 @@ fun main(args: Array<String>) = runBlocking {
             engine.setVolume(0)
             engine.open(unicodeFile)
             val playing = await("MP3 playback") { it.status == AudioStatus.Playing && it.positionMs > 600 }
+            val applied = engine.equalizerRuntime()
+            check(applied.connected && applied.model?.config == eq) { "EQ did not process actual decoded PCM: $applied" }
+            check(abs(applied.model!!.responseDb(500.0) + 6.52467457) < .001)
             engine.setPaused(true)
             val paused = await("pause") { it.status == AudioStatus.Paused }
             delay(400)
@@ -53,6 +59,7 @@ fun main(args: Array<String>) = runBlocking {
             records += buildJsonObject {
                 put("format", "MP3"); put("positionMs", playing.positionMs); put("durationMs", playing.durationMs)
                 put("pausedClockStable", true); put("seekResumeMs", resumed.positionMs); put("volumeVerified", volume)
+                put("customEqProcessedPcm", true); put("eqProcessingRate", applied.model!!.sampleRate)
                 put("unicodePath", true); put("artworkBytes", track.artwork!!.size); put("lyricLines", track.lyrics.lines.size)
             }
             engine.open(flac)

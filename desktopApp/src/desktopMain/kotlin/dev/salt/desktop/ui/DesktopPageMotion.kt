@@ -4,7 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 
-internal val DesktopPageOrder = listOf("首页", "全部歌曲", "扫描音乐", "专辑", "艺人", "统计", "连接", "歌词更新", "设置")
+internal val DesktopPageOrder = listOf("首页", "全部歌曲", "扫描音乐", "专辑", "艺人", "统计", "连接", "歌词更新", "均衡器", "设置")
 
 internal fun <T> AnimatedContentTransitionScope<T>.desktopPageTransition(forward: Boolean): ContentTransform {
     val direction = if (forward) 1 else -1

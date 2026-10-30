@@ -9,8 +9,8 @@ android {
         applicationId = "app.synctone.music"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10
-        versionName = "0.7.2"
+        versionCode = 15
+        versionName = "0.7.7"
         buildConfigField("boolean", "QA_ENABLED", providers.gradleProperty("qa").orElse("false").get())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

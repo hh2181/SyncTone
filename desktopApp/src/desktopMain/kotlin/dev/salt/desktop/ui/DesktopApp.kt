@@ -5,6 +5,7 @@ package dev.salt.desktop.ui
 import dev.salt.buttons.SyncToneIconButton
 import dev.salt.buttons.SyncToneButtonDensity
 import dev.salt.replica.lyrics.online.*
+import dev.salt.replica.equalizer.EqualizerScreen
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -147,11 +148,12 @@ fun DesktopApp(store: DesktopPlayerStore, sheet: PlayerSheetState, owner: Frame,
                             Text("SyncTone", Modifier.padding(start = 10.dp), fontSize = 23.sp, fontWeight = FontWeight.SemiBold)
                         }
                         Spacer(Modifier.height(24.dp))
+                        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                         listOf("首页" to Icons.Default.Home, "全部歌曲" to Icons.Default.MusicNote,
                             "扫描音乐" to Icons.Default.FolderOpen,
                             "专辑" to Icons.Default.Album, "艺人" to Icons.Default.Person,
                             "统计" to appIcon("ic_nav_stats"), "连接" to appIcon("ic_nav_cast"),
-                            "歌词更新" to Icons.Default.Subtitles).forEach { (label, icon) ->
+                            "歌词更新" to Icons.Default.Subtitles, "均衡器" to Icons.Default.Equalizer).forEach { (label, icon) ->
                             val interaction = remember(label) { MutableInteractionSource() }
                             val hovered by interaction.collectIsHoveredAsState()
                             Row(Modifier.fillMaxWidth().height(46.dp).clip(DesktopCardShape)
@@ -170,7 +172,8 @@ fun DesktopApp(store: DesktopPlayerStore, sheet: PlayerSheetState, owner: Frame,
                             }
                             Spacer(Modifier.height(5.dp))
                         }
-                        Spacer(Modifier.weight(1f))
+                        }
+                        Spacer(Modifier.height(12.dp))
                         Row(Modifier.fillMaxWidth().height(46.dp).clip(DesktopCardShape)
                             .background(if (page == "设置") scheme.primary.copy(alpha = .1f) else Color.Transparent)
                             .desktopClickable { navigate("设置") }.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -192,13 +195,15 @@ fun DesktopApp(store: DesktopPlayerStore, sheet: PlayerSheetState, owner: Frame,
                             desktopPageTransition(DesktopPageOrder.indexOf(targetState) > DesktopPageOrder.indexOf(initialState))
                         }, modifier = Modifier.weight(1f)) { target ->
                             Column(Modifier.fillMaxSize()) {
-                                if (target != "歌词更新") Row(Modifier.fillMaxWidth().height(66.dp), verticalAlignment = Alignment.CenterVertically) {
+                                if (target !in listOf("歌词更新", "均衡器")) Row(Modifier.fillMaxWidth().height(66.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Text(target, Modifier.weight(1f), fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
                                     if (target !in listOf("设置", "扫描音乐", "统计", "连接")) Tool("导入音乐", Icons.Default.Add, ::importAudio,
                                         state.ready && !library.importing && library.scan.phase != ScanPhase.Scanning)
                                 }
                                 if (target == "歌词更新") {
                                     LyricsUpdateScreen(onlineLyrics, Modifier.fillMaxSize())
+                                } else if (target == "均衡器") {
+                                    EqualizerScreen(store.equalizer, Modifier.fillMaxSize(), desktop = true)
                                 } else if (target == "扫描音乐") {
                                     MusicScanScreen(library, store.library) { chooseMusicFolder(owner) { store.library.addFolder(it) } }
                                 } else if (target == "统计") {
@@ -358,7 +363,7 @@ fun DesktopApp(store: DesktopPlayerStore, sheet: PlayerSheetState, owner: Frame,
                                             else -> "ic_player_circle"
                                         }), store::cycleMode)
                                         Tool("睡眠定时", appIcon("ic_sleep_timer"), { timer = true })
-                                        Tool("音效", appIcon("ic_audio_effect"), {}, enabled = false)
+                                        Tool("音效", appIcon("ic_audio_effect"), { page = "均衡器"; sheet.to(false) }, enabled = state.ready)
                                         Spacer(Modifier.weight(1f))
                                         Transport(state, store, compact = false)
                                         Spacer(Modifier.weight(1f))

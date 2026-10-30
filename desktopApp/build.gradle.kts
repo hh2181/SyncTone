@@ -17,6 +17,11 @@ kotlin {
                 "dev/salt/replica/lyrics/LyricAnimation.kt", "dev/salt/replica/lyrics/StaggerMotion.kt",
                 "dev/salt/replica/lyrics/LongNoteEnvelope.kt",
                 "dev/salt/replica/lyrics/online/**",
+                "dev/salt/replica/equalizer/EqualizerModel.kt",
+                "dev/salt/replica/equalizer/EqualizerDsp.kt",
+                "dev/salt/replica/equalizer/EqualizerRepository.kt",
+                "dev/salt/replica/equalizer/EqualizerScreen.kt",
+                "dev/salt/replica/equalizer/EqualizerControls.kt",
                 "dev/salt/replica/ui/PlayerSheetState.kt",
                 "dev/salt/replica/statistics/PlaybackStatistics.kt",
                 "dev/salt/replica/statistics/HistorySync.kt",
@@ -43,7 +48,7 @@ kotlin {
         val desktopTest by getting {
             kotlin.srcDir("../app/src/test/java")
             kotlin.include("dev/salt/desktop/**", "dev/salt/replica/sync/SyncLogicTest.kt",
-                "dev/salt/replica/lyrics/online/**")
+                "dev/salt/replica/lyrics/online/**", "dev/salt/replica/equalizer/**")
             dependencies { implementation(kotlin("test-junit")) }
         }
     }
@@ -99,7 +104,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Exe, TargetFormat.Msi)
             packageName = "SyncTone"
-            packageVersion = "0.7.2"
+            packageVersion = "0.7.7"
             modules("java.desktop", "java.logging", "java.net.http", "jdk.unsupported", "java.sql", "jdk.crypto.ec")
             appResourcesRootDir.set(layout.projectDirectory.dir("runtime"))
             windows {
@@ -266,6 +271,17 @@ tasks.register<JavaExec>("controlsUiSmoke") {
     classpath = compilation.output.allOutputs + tests.output.allOutputs + tests.runtimeDependencyFiles!!
     mainClass.set("dev.salt.desktop.ControlsUiSmokeKt")
     args(layout.buildDirectory.dir("reports/controls-ui-smoke").get().asFile.absolutePath)
+    dependsOn("desktopTestClasses")
+}
+
+tasks.register<JavaExec>("equalizerVisualSmoke") {
+    group = "verification"
+    val main = kotlin.targets.getByName("desktop").compilations.getByName("main")
+    val tests = kotlin.targets.getByName("desktop").compilations.getByName("test")
+    classpath = main.output.allOutputs + tests.output.allOutputs + tests.runtimeDependencyFiles!!
+    mainClass.set("dev.salt.desktop.EqualizerVisualSmokeKt")
+    args(layout.buildDirectory.dir("reports/equalizer-visual").get().asFile.absolutePath)
+    args(providers.gradleProperty("eqVisualScenario").orElse("default").get())
     dependsOn("desktopTestClasses")
 }
 
